@@ -11,8 +11,8 @@ aries_parent = os.path.join(os.path.dirname(__file__), "..", "..")
 if aries_parent not in sys.path:
     sys.path.append(aries_parent)
 from Aries.test import AriesTest
-from Aries.basespace import basespace, bs_project, bs_app_session, bs_run, bs_sample
 from Aries.outputs import PackageLogFilter
+from Cancer.basespace import basespace, bs_project, bs_app_session, bs_run, bs_sample
 logger = logging.getLogger(__name__)
 
 
