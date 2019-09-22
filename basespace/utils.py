@@ -5,9 +5,9 @@ import os
 import json
 import tempfile
 import ast
-from ..gcp.storage import GSFile
-from ..strings import Base64String
-from ..web import WebAPI
+from ..Aries.gcp.storage import GSFile
+from ..Aries.strings import Base64String
+from ..Aries.web import WebAPI
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,3 @@
+[submodule "Aries"]
+	path = Aries
+	url = https://github.com/qiuosier/Aries.git
