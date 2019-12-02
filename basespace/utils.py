@@ -154,7 +154,7 @@ def api_collection(href):
     return items
 
 
-def transfer_file_to_gcloud(gcs_bucket_name, gcs_prefix, file_id=None, file_info_href=None):
+def transfer_file_to_gcloud(gs_prefix, file_id=None, file_info_href=None):
     if file_id is not None:
         file_info_href = "v1pre3/files/%s" % file_id
         file_content_href = "v1pre3/files/%s/content" % file_id
@@ -172,8 +172,7 @@ def transfer_file_to_gcloud(gcs_bucket_name, gcs_prefix, file_id=None, file_info
     filename = file_info.get("Name")
     if filename.endswith(".fastq.gz"):
         filename = filename.replace(".fastq.gz", "_%s.fastq.gz" % file_id)
-    gcs_filename = gcs_prefix + filename
-    gs_path = "gs://%s/%s" % (gcs_bucket_name, gcs_filename)
+    gs_path = os.path.join(gs_prefix, filename)
 
     # Skip if a file exists and have the same size.
     gs_file = GSFile(gs_path)
