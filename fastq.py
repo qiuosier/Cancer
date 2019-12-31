@@ -53,9 +53,11 @@ class FASTQGzip:
 
 
 class IlluminaFASTQ:
+    processing_progress = {}
+
     dual_index_pattern = r"[ACGTN]{8}\+[ACGTN]{8}"
 
-    def __init__(self, file_path):
+    def __init__(self, file_path, uuid=None):
         file_path = str(file_path)
         if file_path.startswith("gs://"):
             if not GSFile(file_path).blob.exists():
@@ -63,6 +65,8 @@ class IlluminaFASTQ:
         elif not os.path.exists(file_path):
             raise FileNotFoundError("File not found at %s." % file_path)
         self.file_path = file_path
+        self.uuid = uuid
+        logger.debug("Initialized Illumina FASTQ object.")
 
     def peek_barcode(self):
         if self.file_path.startswith("gs://"):
@@ -77,11 +81,25 @@ class IlluminaFASTQ:
         return barcode_dict
 
     def __process_barcode(self, lines, method):
+        """
+
+        Args:
+            lines: Iterable lines from FASTQ file.
+            method: The method for processing the line containing the barcode.
+
+        Returns:
+
+        """
         barcode_dict = {}
         for i, line in enumerate(lines, start=1):
+            if i > 0 and i % (10 * 1000) == 0:
+                logger.debug("%s reads processed." % i)
+            # The line containing barcode starts with @
             if not line.startswith("@"):
                 continue
+            # Raw barcode
             barcode = line.strip().split(":")[-1]
+
             if re.match(self.dual_index_pattern, barcode):
                 idx = barcode.split("+")
                 i7 = idx[0]
@@ -92,6 +110,8 @@ class IlluminaFASTQ:
 
     @staticmethod
     def __count_barcode(barcode_dict, barcode, row_number):
+        """Increments the number of reads for a particular barcode
+        """
         return barcode_dict.get(barcode, 0) + 1
 
     @staticmethod
@@ -108,9 +128,19 @@ class IlluminaFASTQ:
         return barcode_dict
 
     def count_by_barcode(self, threshold=0):
+        """Counts the number of reads for each barcode in the FASTQ file.
+
+        Args:
+            threshold: Includes only barcodes with number of reads more than threshold.
+
+        Returns:
+
+        """
         with open(self.file_path, 'r') as f:
+            logger.debug("Counting number of reads per barcode...")
             barcode_dict = self.__process_barcode(f, self.__count_barcode)
-        return {k: len(v) for k, v in barcode_dict.items() if v > threshold}
+        logger.debug("%s barcodes in the file" % len(barcode_dict.keys()))
+        return {k: v for k, v in barcode_dict.items() if v > threshold}
 
 
 class BarcodeStatistics:
