@@ -2,6 +2,7 @@ import os
 import re
 import io
 import gzip
+import json
 import logging
 from commons.Aries.storage import StorageFile
 from commons.Aries.gcp.storage import GSFile
@@ -107,7 +108,7 @@ class IlluminaFASTQ:
         with open(self.file_path, 'r') as lines:
             for i, line in enumerate(lines, start=1):
                 # Progress
-                if i > 0 and i % (10 * 1000) == 0:
+                if i > 0 and i % (10 * 10000) == 0:
                     logger.debug("%s reads processed." % round(i / 4))
 
                 # Continue to write to the current file if the line is not a barcode line.
@@ -126,12 +127,14 @@ class IlluminaFASTQ:
                 file_obj = barcode_dict.get(barcode)
                 if not file_obj:
                     file_path = os.path.join(output_dir, barcode + ".fastq")
+
                     logger.debug("Creating file: %s" % file_path)
-                    file_obj = StorageFile.init(file_path)
+                    file_obj = StorageFile.init(file_path).open("w")
                     barcode_dict[barcode] = file_obj
                 # Write the barcode line
                 file_obj.write(line)
                 current_file = file_obj
+            logger.debug("%s reads processed." % round(i / 4))
         for file_obj in barcode_dict.values():
             file_obj.close()
 
@@ -199,21 +202,54 @@ class BarcodeStatistics:
     def __init__(self, barcode_dict):
         self.barcode_dict = barcode_dict
 
+    @staticmethod
+    def from_json(json_string):
+        return BarcodeStatistics(json.loads(json_string))
+
     def filter_by_reads(self, threshold=0):
         self.barcode_dict = {k: v for k, v in self.barcode_dict.items() if v > threshold}
         return self
 
     def sort_data(self, max_size=0):
-        labels = []
+        """
+
+        Args:
+            max_size: The maximum number of barcodes and count to be returned.
+
+        Returns:
+
+        """
+        barcodes = []
         counts = []
         for k, v in self.barcode_dict.items():
-            labels.append(k)
+            barcodes.append(k)
             counts.append(v)
-        counts, labels = sort_lists(counts, labels, reverse=True)
+        counts, barcodes = sort_lists(counts, barcodes, reverse=True)
         if max_size and len(counts) > max_size:
             counts = counts[:max_size]
-            labels = labels[:max_size]
-        return counts, labels
+            barcodes = barcodes[:max_size]
+        return counts, barcodes
+
+    def major_barcodes(self):
+        """Returns a list of major barcodes from the statistics.
+
+        The barcodes will be divided into two groups (clusters) if possible, i.e. major and minor.
+        The difference between min. reads major and max. reads minor barcodes must be greater than
+            twice the difference between any barcodes within the same group.
+        If such groups does not exist, an empty list will be returned.
+
+        Returns: A list of major barcodes. An empty list will be returned if there are less than 3 barcodes.
+
+        """
+        counts, barcodes = self.sort_data()
+        if len(counts) < 3:
+            return []
+        gaps = [counts[i] - counts[i + 1] for i in range(len(counts) - 1)]
+        indices = list(range(len(counts) - 1))
+        gaps, indices = sort_lists(gaps, indices, reverse=True)
+        if gaps[0] > 2 * gaps[1]:
+            return barcodes[:indices[0] + 1]
+        return []
 
     def histogram(self, max_bins=20):
         counts, labels = self.sort_data(max_bins)
