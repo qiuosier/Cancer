@@ -138,7 +138,7 @@ class IlluminaFASTQ:
         """
         barcode_dict = {}
         for i, line in enumerate(lines, start=1):
-            if i > 0 and i % (10 * 1000) == 0:
+            if i > 0 and i % 1000000 == 0:
                 logger.debug("%s reads processed." % round(i / 4))
             # The line containing barcode starts with @
             if not line.startswith("@"):
@@ -188,23 +188,32 @@ class IlluminaFASTQ:
 
 class BarcodeStatistics:
     def __init__(self, barcode_dict):
+        """
+
+        Args:
+            barcode_dict (dict):  A dictionary where barcodes and keys and the numbers of reads as value
+        """
         self.barcode_dict = barcode_dict
 
     @staticmethod
     def from_json(json_string):
         return BarcodeStatistics(json.loads(json_string))
 
+    def total_reads(self):
+        return sum(self.barcode_dict.values())
+
     def filter_by_reads(self, threshold=0):
         self.barcode_dict = {k: v for k, v in self.barcode_dict.items() if v > threshold}
         return self
 
-    def sort_data(self, max_size=0):
+    def sort_data(self, max_size=0, reverse=True):
         """
 
         Args:
             max_size: The maximum number of barcodes and count to be returned.
+            reverse: Indicates whether to sort the data in reverse order (from large to small).
 
-        Returns:
+        Returns: A 2-tuple: (Number of Reads, Barcode)
 
         """
         barcodes = []
@@ -212,11 +221,26 @@ class BarcodeStatistics:
         for k, v in self.barcode_dict.items():
             barcodes.append(k)
             counts.append(v)
-        counts, barcodes = sort_lists(counts, barcodes, reverse=True)
+        counts, barcodes = sort_lists(counts, barcodes, reverse=reverse)
         if max_size and len(counts) > max_size:
             counts = counts[:max_size]
             barcodes = barcodes[:max_size]
         return counts, barcodes
+
+    def as_sorted_list(self, max_size=0, reverse=True):
+        counts, barcodes = self.sort_data(max_size=max_size, reverse=reverse)
+        barcode_list = []
+        for i in range(len(counts)):
+            barcode_list.append({
+                "barcode": barcodes[i],
+                "count": counts[i]
+            })
+        # Calculate the mismatches between every barcode in the list and the first barcode in the list
+        dominant_barcode = Sequence(barcode_list[0]["barcode"])
+        for barcode in barcode_list:
+            mismatch = dominant_barcode.match(barcode["barcode"])
+            barcode["mismatch"] = mismatch
+        return barcode_list
 
     def major_barcodes(self):
         """Returns a list of major barcodes from the statistics.
