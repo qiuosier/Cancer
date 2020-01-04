@@ -76,4 +76,4 @@ class TestBaseSpace(AriesTest):
         samples = bs_app_session.get_samples(session.get("Id"))
         self.assertIsNotNone(samples)
         sample = random.choice(samples)
-        r1, r2 = bs_sample.get_fastq_pair(sample.get("Id"))
+        bs_sample.get_fastq_pairs(sample.get("Id"))
