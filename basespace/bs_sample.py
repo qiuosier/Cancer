@@ -27,28 +27,36 @@ def get_files(bs_sample_id, extension='fastq.gz'):
     return files
 
 
-def get_fastq_pair(bs_sample_id):
+def get_fastq_pairs(bs_sample_id):
     """Gets the BaseSpace urls for the pair of FASTQ files of a sample.
 
     Args:
         bs_sample_id: BaseSpace ID of a sample
 
-    Returns: a tuple of URLs, (R1_URL, R2_URL).
+    Returns: A list of FASTQ pairs (lists).
 
     """
-    fastq_r1 = None
-    fastq_r2 = None
+    pairs = {}
     files = get_files(bs_sample_id)
-    if files:
-        for file in files:
-            filename = file.get("Name")
-            if "_R1_" in filename:
-                href = file.get("Href")
-                fastq_r1 = API_SERVER + href
-            elif "_R2_" in filename:
-                href = file.get("Href")
-                fastq_r2 = API_SERVER + href
-    return fastq_r1, fastq_r2
+    if not files:
+        return []
+    for file in files:
+        filename = file.get("Name")
+        key = filename.replace("_R1_", "_").replace("_R2_", "_")
+        href = file.get("Href")
+        uri = API_SERVER + href
+        fastq_pair = pairs.get(key, [])
+        fastq_pair.append(uri)
+        pairs[key] = fastq_pair
+    pair_list = []
+    for fastq_pair in pairs.values():
+        fastq_pair.sort()
+        i = 0
+        while i < len(fastq_pair) - 1:
+            p = [fastq_pair[i], fastq_pair[i + 1]]
+            i += 2
+            pair_list.append(p)
+    return pair_list
 
 
 def get_sample(project_name, sample_name):
