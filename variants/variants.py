@@ -1,6 +1,7 @@
 import csv
 import copy
 import sys
+from commons.Aries.storage import StorageFile
 
 
 class VariantCallList:
@@ -191,7 +192,7 @@ class CSVFile(VariantCallList):
                 break
         for key in self.header_keys:
             if self.columns.get(key) is None:
-                raise AttributeError("Column %s not found." % key)
+                raise AttributeError("Column %s not found in %s." % (key, self.columns))
 
     def write_headers(self, to_file):
         to_file.write(self.header_line + "\n")
