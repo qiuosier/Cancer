@@ -26,6 +26,18 @@ class Variant:
         return self.columns[1]
 
     @property
+    def rs_id(self):
+        return self.columns[2]
+
+    @property
+    def ref(self):
+        return self.columns[3]
+
+    @property
+    def alt(self):
+        return self.columns[4]
+
+    @property
     def info(self):
         data = dict()
         pairs = self.columns[7].split(";")
@@ -95,5 +107,4 @@ class InMemoryVCF(VCF):
                 if i < len(headers):
                     data[headers[i]] = arr[i]
             new_index[k] = data
-        logger.debug(new_index)
         return new_index
