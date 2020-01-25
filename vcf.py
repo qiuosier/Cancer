@@ -48,6 +48,9 @@ class Variant:
             data[key] = val
         return data
 
+    def __str__(self):
+        return "%s:%s:%s>%s" % (self.chromosome, self.position, self.ref, self.alt)
+
 
 class InMemoryVCF(VCF):
     def __init__(self, uri, annotation_uri):
