@@ -49,9 +49,19 @@ class FASTQPair:
     def __match_adapters(read1, read2, adapters):
         for adapter, max_mismatch in adapters.items():
             if adapter.match(read1.sequence[:adapter.length]) <= max_mismatch:
-                read1.sequence = read1.sequence[adapter.length:]
+                read1 = FASTQPair.trim_read(read1, adapter)
                 return adapter, read1, read2
             if adapter.match(read2.sequence[:adapter.length]) <= max_mismatch:
-                read2.sequence = read2.sequence[adapter.length:]
+                read2 = FASTQPair.trim_read(read2, adapter)
                 return adapter, read1, read2
         return None, read1, read2
+
+    @staticmethod
+    def trim_read(read, adapter):
+        k = adapter.length - 1
+        while read.sequence[k] == adapter.sequence[k] and k > 0:
+            k -= 1
+        k += 1
+        read.sequence = read.sequence[k:]
+        read.qualities = read.qualities[k:]
+        return read
