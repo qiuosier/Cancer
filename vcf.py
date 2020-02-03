@@ -43,6 +43,8 @@ class Variant:
         pairs = self.columns[7].split(";")
         for pair in pairs:
             arr = pair.split("=", 1)
+            if len(arr) < 2:
+                continue
             key = arr[0]
             val = arr[1]
             data[key] = val
