@@ -4,11 +4,11 @@ import io
 import gzip
 import json
 import logging
-from commons.Aries.storage import StorageFile
-from commons.Aries.gcp.storage import GSFile
-from commons.Aries.visual.plotly import PlotlyFigure
-from commons.Aries.collections import sort_lists
-from commons.Aries.tasks import ShellCommand
+from .Aries.storage import StorageFile
+from .Aries.gcp.storage import GSFile
+from .Aries.visual.plotly import PlotlyFigure
+from .Aries.collections import sort_lists
+from .Aries.tasks import ShellCommand
 from .sequence import Sequence
 logger = logging.getLogger(__name__)
 
@@ -18,10 +18,17 @@ class FASTQRead:
     def __init__(self, lines):
         if len(lines) != 4:
             raise ValueError("lines must be a list of 4 strings.")
-        self.identifier = lines[0]
-        self.sequence = lines[1]
-        self.description = lines[2]
-        self.quality = lines[3]
+        s = [line.decode() if isinstance(line, bytes) else line for line in lines]
+        self.identifier = s[0]
+        self.sequence = s[1]
+        self.description = s[2]
+        self.quality = s[3]
+
+    def write_to(self, f):
+        f.write(self.identifier.encode())
+        f.write(self.sequence.encode())
+        f.write(self.description.encode())
+        f.write(self.quality.encode())
 
 
 class FASTQGzip:
