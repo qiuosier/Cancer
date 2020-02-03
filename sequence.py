@@ -85,5 +85,4 @@ class Sequence:
     def match(self, sequence):
         s1 = self.sequence.upper()
         s2 = sequence.upper()
-        # return hamming(s1, s2)
         return editdistance.eval(s1, s2)

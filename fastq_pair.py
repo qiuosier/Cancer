@@ -1,4 +1,3 @@
-import gzip
 import os
 import logging
 import math
@@ -30,31 +29,24 @@ class FASTQPair:
                 dnaio.open(r1_match_path, file2=r2_match_path, mode='w') as out_match, \
                 dnaio.open(r1_unmatch_path, file2=r2_unmatch_path, mode='w') as out_unmatch:
             for read1, read2 in fastq_in:
-                adapter, trimed_read1, trimed_read2 = self.__match_adapters(read1, read2, adapters)
+                adapter, trimmed_read1, trimmed_read2 = self.__match_adapters(read1, read2, adapters)
                 if adapter:
                     # Sequence matched a barcode
                     counter_matched += 1
-                    out_match.write(trimed_read1, trimed_read2)
+                    out_match.write(trimmed_read1, trimmed_read2)
                 else:
                     # Sequence does not match a barcode
                     counter_unmatched += 1
-                    out_unmatch.write(trimed_read1, trimed_read2)
+                    out_unmatch.write(trimmed_read1, trimmed_read2)
                 counter += 1
-                if counter % 50000 == 0:
+                if counter % 100000 == 0:
                     print("%s reads processed." % counter)
-            print("%s reads processed." % counter)
-            print("%s reads matched." % counter_matched)
-            print("%s reads unmatched." % counter_unmatched)
+        print("%s reads processed." % counter)
+        print("%s reads matched." % counter_matched)
+        print("%s reads unmatched." % counter_unmatched)
 
-    def __match_adapters(self, read1, read2, adapters):
-        # if not read1.identifier and not read2.identifier:
-        #     raise StopIteration
-        # if not (read1.identifier and read2.identifier):
-        #     logger.error("R1 and R2 does not have the same number of reads:")
-        #     logger.error(read1.identifier)
-        #     logger.error(read2.identifier)
-        #     raise StopIteration
-
+    @staticmethod
+    def __match_adapters(read1, read2, adapters):
         for adapter, max_mismatch in adapters.items():
             if adapter.match(read1.sequence[:adapter.length]) <= max_mismatch:
                 read1.sequence = read1.sequence[adapter.length:]
