@@ -11,7 +11,7 @@ def main(program, *args):
         adapters = [s.strip() for s in str(args[2]).split(",")]
         output_dir = args[3]
         p = FASTQPair(r1, r2)
-        p.extract_reads_by_adapters(adapters, output_dir)
+        p.extract_reads_by_adapters(adapters, output_dir, error_rate=0.2)
     print("Total Time: %s" % (datetime.datetime.now() - start))
 
 

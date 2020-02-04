@@ -2,21 +2,19 @@ import os
 import logging
 import math
 import dnaio
-from .sequence import Sequence
+import parasail
 logger = logging.getLogger(__name__)
 
 
 class FASTQPair:
+    alignment_matrix = parasail.matrix_create("ACGT", 0, -1)
+
     def __init__(self, r1, r2):
         self.r1 = r1
         self.r2 = r2
 
-    def extract_reads_by_adapters(self, adapters, output_dir):
+    def extract_reads_by_adapters(self, adapters, output_dir, error_rate=0.1):
         print("Adapters: %s" % adapters)
-        # adapters is a dictionary of:
-        # key: the barcode
-        # value: the number of mismatches allowed
-        adapters = {Sequence(s): math.floor(len(s)) * 0.2 for s in adapters}
         counter = 0
         counter_matched = 0
         counter_unmatched = 0
@@ -29,7 +27,7 @@ class FASTQPair:
                 dnaio.open(r1_match_path, file2=r2_match_path, mode='w') as out_match, \
                 dnaio.open(r1_unmatch_path, file2=r2_unmatch_path, mode='w') as out_unmatch:
             for read1, read2 in fastq_in:
-                adapter, trimmed_read1, trimmed_read2 = self.__match_adapters(read1, read2, adapters)
+                adapter, trimmed_read1, trimmed_read2 = self.__match_adapters(read1, read2, adapters, error_rate)
                 if adapter:
                     # Sequence matched a barcode
                     counter_matched += 1
@@ -46,22 +44,26 @@ class FASTQPair:
         print("%s reads unmatched." % counter_unmatched)
 
     @staticmethod
-    def __match_adapters(read1, read2, adapters):
-        for adapter, max_mismatch in adapters.items():
-            if adapter.match(read1.sequence[:adapter.length]) <= max_mismatch:
-                read1 = FASTQPair.trim_read(read1, adapter)
-                return adapter, read1, read2
-            if adapter.match(read2.sequence[:adapter.length]) <= max_mismatch:
-                read2 = FASTQPair.trim_read(read2, adapter)
-                return adapter, read1, read2
+    def __match_adapters(read1, read2, adapters, error_rate=0.1):
+        for adapter in adapters:
+            for read in [read1, read2]:
+                # Align adapter to read 1
+                result = parasail.sg_de_stats(adapter, read.sequence[:15], 1, 1, FASTQPair.alignment_matrix)
+                if result.matches < 3:
+                    continue
+                min_score = - math.floor(result.matches * error_rate)
+                if result.score >= min_score:
+                    read.sequence = read.sequence[result.end_ref + 1:]
+                    read.qualities = read.qualities[result.end_ref + 1:]
+                    return adapter, read1, read2
         return None, read1, read2
 
-    @staticmethod
-    def trim_read(read, adapter):
-        k = adapter.length - 1
-        while read.sequence[k] == adapter.sequence[k] and k > 0:
-            k -= 1
-        k += 1
-        read.sequence = read.sequence[k:]
-        read.qualities = read.qualities[k:]
-        return read
+    # @staticmethod
+    # def trim_read(read, adapter):
+    #     k = adapter.length - 1
+    #     while read.sequence[k] == adapter.sequence[k] and k > 0:
+    #         k -= 1
+    #     k += 1
+    #     read.sequence = read.sequence[k:]
+    #     read.qualities = read.qualities[k:]
+    #     return read
