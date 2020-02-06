@@ -1,6 +1,7 @@
 import datetime
 import argparse
 from .fastq_pair import FASTQPair
+from .demux import demux_inline
 
 
 def main():
@@ -29,12 +30,14 @@ def main():
     start = datetime.datetime.now()
     print("Starting %s at %s" % (program, start))
     if program == "demux_inline":
-        r1 = args.r1[0]
-        r2 = args.r2[1]
+        if len(args.r1) != len(args.r2):
+            raise ValueError("R1 and R2 must have the same number of files.")
+        fastq_files = []
+        for i in range(len(args.r1)):
+            fastq_files.append((args.r1[i], args.r2[i]))
         adapters = [s.strip() for s in args.barcode]
         output_dir = args.output
-        p = FASTQPair(r1, r2)
-        p.extract_reads_by_adapters(adapters, output_dir, error_rate=0.2)
+        demux_inline(fastq_files, adapters, output_dir, error_rate=0.2)
     elif program == "compare_fastq":
         FASTQPair(*args.FASTQ).diff(args.compare[0], args.compare[1], args.output)
 

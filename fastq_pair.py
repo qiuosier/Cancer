@@ -36,9 +36,20 @@ class ReadPairs:
 
 class FASTQPair:
 
-    def __init__(self, r1, r2):
+    r1_matched_filename = "R1_matched.fastq.gz"
+    r2_matched_filename = "R2_matched.fastq.gz"
+    r1_unmatched_filename = "R1_unmatched.fastq.gz"
+    r2_unmatched_filename = "R2_unmatched.fastq.gz"
+
+    def __init__(self, r1, r2, ident=None):
         self.r1 = r1
         self.r2 = r2
+        self.ident = ident
+
+    def print_output(self, s):
+        if self.ident:
+            print("%s: %s" % (self.ident, s))
+        print(s)
 
     def extract_reads_by_adapters(self, adapters, output_dir, error_rate=0.1):
         print("Adapters: %s" % adapters)
@@ -70,10 +81,10 @@ class FASTQPair:
                     out_unmatch.write(read1, read2)
                 counter += 1
                 if counter % 100000 == 0:
-                    print("%s reads processed." % counter)
-        print("%s reads processed." % counter)
-        print("%s reads matched." % counter_matched)
-        print("%s reads unmatched." % counter_unmatched)
+                    self.print_output("%s reads processed." % counter)
+        self.print_output("%s reads processed." % counter)
+        self.print_output("%s reads matched." % counter_matched)
+        self.print_output("%s reads unmatched." % counter_unmatched)
 
     # @staticmethod
     # def __match_adapters(read1, read2, adapters, error_rate=0.1):
@@ -118,12 +129,16 @@ class FASTQPair:
         diff_fastq2 = os.path.join(output_dir, "diff_fastq2.txt")
         # Stores reads found in both FASTQs but with difference sequence
         diff_seq = os.path.join(output_dir, "diff_seq.txt")
+        diff_trim = os.path.join(output_dir, "diff_trim.txt")
         counter_1 = 0
         counter_2 = 0
-        counter_d = 0
+        counter_diff = 0
+        counter_same = 0
+        counter_match = 0
         counter = 0
         with dnaio.open(r1, file2=r2) as fastq2, \
                 open(diff_fastq2, 'w') as diff2, \
+                open(diff_trim, 'w') as difft, \
                 open(diff_seq, 'w') as diffs:
             for read1, read2 in fastq2:
                 counter += 1
@@ -133,9 +148,16 @@ class FASTQPair:
                 if ident in fastq1_dict:
                     fastq1_found[ident] = True
                     f1_seq1, f1_seq2 = fastq1_dict.get(ident)
-                    if self.__match_reads(read1.sequence, f1_seq1) and self.__match_reads(read2.sequence, f1_seq2):
+                    if read1.sequence == f1_seq1 and read2.sequence == f1_seq2:
+                        counter_same += 1
                         continue
-                    counter_d += 1
+                    elif self.__match_reads(read1.sequence, f1_seq1) and self.__match_reads(read2.sequence, f1_seq2):
+                        difft.write(ident + '\n')
+                        difft.write("F2R1: " + read1.sequence + '\n')
+                        difft.write("F2R2: " + read2.sequence + '\n')
+                        counter_match += 1
+                        continue
+                    counter_diff += 1
                     diffs.write(ident + '\n')
                     if not self.__match_reads(read1.sequence, f1_seq1):
                         diffs.write("F1R1: " + f1_seq1 + '\n')
@@ -163,8 +185,11 @@ class FASTQPair:
         print("%d reads in FASTQ2." % counter)
         print("%d reads in FASTQ1 only." % counter_1)
         print("%d reads in FASTQ2 only." % counter_2)
-        print("%d reads have difference sequence." % counter_d)
+        print("%d reads in both pairs." % (counter_same + counter_match + counter_diff))
+        print("%d reads in both pairs are exactly the same." % counter_same)
+        print("%d reads in FASTQ1 are a substrings of  reads in FASTQ2." % counter_match)
+        print("%d reads have difference sequence." % counter_diff)
 
     @staticmethod
     def __match_reads(s1, s2):
-        return s1.endswith(s2)
+        return (len(s1) - len(s2) > 4 and s1.endswith(s2)) or s1 == s2
