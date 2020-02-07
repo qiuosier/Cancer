@@ -1,6 +1,6 @@
 import logging
 from .Aries.storage import StorageFile
-from .variants.variants import CSVFile
+from .variants.files import CSVVariants
 logger = logging.getLogger(__name__)
 
 
@@ -102,7 +102,7 @@ class InMemoryVCF(VCF):
     @staticmethod
     def load_annotation(uri):
         new_index = dict()
-        csv = CSVFile(uri, "\t")
+        csv = CSVVariants(uri)
         index = csv.build_index()
         headers = csv.header_line.split("\t")
         for k, v in index.items():
