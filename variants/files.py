@@ -1,7 +1,7 @@
 import csv
 import copy
 import sys
-from commons.Aries.table import TableCSVFile
+from ..Aries.table import TableCSVFile
 
 
 class VCFVariant:
@@ -246,6 +246,11 @@ class CSVVariants(VariantsFile):
 
 
 class WhitelistFilter:
+    # This file contains a subset of the whitelist
+    whitelist_output_filename = "whitelist_subset.csv"
+    # This file contains a subset of the VCF
+    vcf_output_filename = "variants_subset.vcf"
+
     def __init__(self, variant_calls):
         """
 

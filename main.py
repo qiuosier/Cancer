@@ -30,15 +30,15 @@ class Program:
         whitelist_path = str(args.whitelist)
         if whitelist_path.endswith(".vcf"):
             whitelist = files.VCFVariants(whitelist_path)
-            out_whitelist = os.path.join(args.output, "whitelist_subset.vcf")
+            out_whitelist = os.path.join(args.output, files.WhitelistFilter.whitelist_output_filename)
         elif whitelist_path.endswith(".csv") or whitelist_path.endswith(".tsv"):
             whitelist = files.CSVVariants(whitelist_path)
-            out_whitelist = os.path.join(args.output, "whitelist_subset.csv")
+            out_whitelist = os.path.join(args.output, files.WhitelistFilter.whitelist_output_filename)
         else:
             raise TypeError("Whitelist file type is not supported: %s" % whitelist_path)
         if not os.path.exists(args.output):
             os.makedirs(args.output)
-        out_vcf = os.path.join(args.output, "variants_subset.vcf")
+        out_vcf = os.path.join(args.output, files.WhitelistFilter.vcf_output_filename)
         vcf = files.VCFVariants(args.vcf)
         whitelist_filter = files.WhitelistFilter(whitelist)
         print("%s variants in the white list." % len(whitelist_filter.index.keys()))
