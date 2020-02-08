@@ -13,13 +13,13 @@ class Variant:
     def __init__(self, vcf_line, annotation=None):
         self.line = vcf_line
         self.columns = self.line.split("\t")
-        if annotation is None:
-            self.annotation = dict()
         self.annotation = annotation
+        if not self.annotation:
+            self.annotation = dict()
 
     @property
     def chromosome(self):
-        return self.columns[0]
+        return str(self.columns[0]).upper().strip("CHR")
 
     @property
     def position(self):
@@ -51,7 +51,7 @@ class Variant:
         return data
 
     def __str__(self):
-        return "%s:%s:%s>%s" % (self.chromosome, self.position, self.ref, self.alt)
+        return "%s:g.%s%s>%s" % (self.chromosome, self.position, self.ref, self.alt)
 
 
 class InMemoryVCF(VCF):
@@ -93,7 +93,7 @@ class InMemoryVCF(VCF):
         position = arr[1]
         ref = arr[3]
         alt = arr[4]
-        return "%s:%s:%s>%s" % (chromosome, position, ref, alt)
+        return "%s:g.%s%s>%s" % (chromosome, position, ref, alt)
 
     @property
     def count(self):
@@ -101,12 +101,13 @@ class InMemoryVCF(VCF):
 
     @staticmethod
     def load_annotation(uri):
+        logger.debug("Loading annotations from %s" % uri)
         new_index = dict()
         csv = CSVVariants(uri)
         index = csv.build_index()
-        headers = csv.header_line.split("\t")
+        headers = csv.headers
         for k, v in index.items():
-            arr = v.split("\t")
+            arr = v.split(csv.delimiter)
             data = dict()
             for i in range(len(arr)):
                 if i < len(headers):

@@ -210,6 +210,7 @@ class CSVVariants(VariantsFile):
             self.delimiter = self.table.kwargs.get("dialect").delimiter
         self.columns = dict()
         super().__init__(uri)
+        self.headers = self.table.headers
         self.header_line = self.delimiter.join(["\"%s\"" % h for h in self.table.headers])
 
     def variant_key(self, row):
