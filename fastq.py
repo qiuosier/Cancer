@@ -253,8 +253,9 @@ class BarcodeStatistics:
         """Returns a list of major barcodes from the statistics.
 
         The barcodes will be divided into two groups (clusters) if possible, i.e. major and minor.
-        The difference between min. reads major and max. reads minor barcodes must be greater than
-            twice the difference between any barcodes within the same group.
+        The gap between min. reads major and max. reads minor barcodes must be greater than
+            twice the gap between any barcodes within the same group.
+        A gap between counter1 and counter2 is defined as counter1 / counter2.
         If such groups does not exist, an empty list will be returned.
 
         Returns: A list of major barcodes. An empty list will be returned if there are less than 3 barcodes.
@@ -263,7 +264,7 @@ class BarcodeStatistics:
         counts, barcodes = self.sort_data()
         if len(counts) < 3:
             return []
-        gaps = [counts[i] - counts[i + 1] for i in range(len(counts) - 1)]
+        gaps = [counts[i] / counts[i + 1] for i in range(len(counts) - 1)]
         indices = list(range(len(counts) - 1))
         gaps, indices = sort_lists(gaps, indices, reverse=True)
         if gaps[0] > 2 * gaps[1]:
