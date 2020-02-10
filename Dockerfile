@@ -1,9 +1,10 @@
 FROM python:3.8
+ADD ./requirements.txt /requirements.txt
+RUN pip install -r /requirements.txt
 COPY . /Cancer
 WORKDIR /Cancer
 RUN git submodule init
 RUN git submodule update
-WORKDIR /
 RUN pip install -r /Cancer/Aries/requirements.txt
-RUN pip install -r /Cancer/requirements.txt
+WORKDIR /
 ENTRYPOINT python -m Cancer.main
