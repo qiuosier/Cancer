@@ -23,6 +23,9 @@ def demux_inline(fastq_files, adapters, output_dir, error_rate=0.2):
     """
     if not isinstance(fastq_files, list):
         fastq_files = [fastq_files]
+    # Creates output directory if it does not exist.
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     pairs_count = len(fastq_files)
     if pairs_count == 1:
         demux_fastq_pair(fastq_files[0][0], fastq_files[0][1], adapters, output_dir, error_rate)
