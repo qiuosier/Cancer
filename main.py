@@ -17,7 +17,7 @@ class Program:
         adapters = [s.strip() for s in args.barcode]
         if not os.path.exists(args.output):
             os.makedirs(args.output)
-        demux_inline(fastq_files, adapters, args.output, error_rate=0.2)
+        demux_inline(fastq_files, adapters, args.output, error_rate=args.error_rate)
 
     @staticmethod
     def compare_fastq(args):
@@ -61,6 +61,7 @@ def main():
     sub_parser.add_argument('--r2', nargs='+', required=True, help="FASTQ R2 files")
     sub_parser.add_argument('--barcode', nargs='+', required=True, help="Inline Barcodes")
     sub_parser.add_argument('--output', required=True, help="Output Directory")
+    sub_parser.add_argument('--error_rate', type=float, help="Max Error Allowed")
 
     sub_parser = subparsers.add_parser("compare_fastq", help="Compare reads in two pairs of FASTQ files.")
     sub_parser.add_argument('FASTQ', nargs=2, help="FASTQ R1 and R2 files")
