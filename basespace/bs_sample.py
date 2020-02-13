@@ -36,26 +36,43 @@ def get_fastq_pairs(bs_sample_id):
     Returns: A list of FASTQ pairs (lists).
 
     """
-    pairs = {}
+    # Returns an empty list if there is no file
     files = get_files(bs_sample_id)
     if not files:
         return []
+
+    # Pairs stores the pairs of FASTQ files as a dictionary of dictionaries.
+    # e.g. pairs = {"abc": {"R1": "xxx", "R2": "xxx}, "def": {"R1": "xxx", "R2": "xxx}}
+    pairs = {}
     for file in files:
         filename = file.get("Name")
+        # Raise an error if both R1 and R2 are in the filename.
+        if "_R1_" in filename and "_R2_" in filename:
+            raise ValueError("Unable to determine whether the file from sample ID=%s is R1 or R2: %s" % (
+                bs_sample_id, filename
+            ))
+        # Key is used to identify the files from the same pair
         key = filename.replace("_R1_", "_").replace("_R2_", "_")
+        # Get the URL of the file
         href = file.get("Href")
         uri = API_SERVER + href
-        fastq_pair = pairs.get(key, [])
-        fastq_pair.append(uri)
+        # Save the URI to pairs
+        fastq_pair = pairs.get(key, dict())
+        if "_R1_" in filename:
+            fastq_pair["R1"] = uri
+        if "_R2_" in filename:
+            fastq_pair["R2"] = uri
         pairs[key] = fastq_pair
+    # Convert the "pairs" dictionary to a list of pairs
     pair_list = []
     for fastq_pair in pairs.values():
-        fastq_pair.sort()
-        i = 0
-        while i < len(fastq_pair) - 1:
-            p = [fastq_pair[i], fastq_pair[i + 1]]
-            i += 2
-            pair_list.append(p)
+        r1 = fastq_pair.get("R1")
+        r2 = fastq_pair.get("R2")
+        if not r1:
+            raise ValueError("Missing R1 for file %s in sample ID=%s" % (r2, bs_sample_id))
+        if not r2:
+            raise ValueError("Missing R2 for file %s in sample ID=%s" % (r1, bs_sample_id))
+        pair_list.append([r1, r2])
     return pair_list
 
 
