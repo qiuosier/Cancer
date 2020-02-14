@@ -52,7 +52,13 @@ def get_fastq_pairs(bs_sample_id):
                 bs_sample_id, filename
             ))
         # Key is used to identify the files from the same pair
-        key = filename.replace("_R1_", "_").replace("_R2_", "_")
+        # In the filename, the string before _R1_ or _R2_ should be the same.
+        if "_R1_" in filename:
+            key = str(filename).rsplit("_R1_", 1)
+        elif "_R2_" in filename:
+            key = str(filename).rsplit("_R2_", 1)
+        else:
+            raise ValueError("R1 or R2 is not found in the filename: %s" % filename)
         # Get the URL of the file
         href = file.get("Href")
         uri = API_SERVER + href
