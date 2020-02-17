@@ -54,9 +54,9 @@ def get_fastq_pairs(bs_sample_id):
         # Key is used to identify the files from the same pair
         # In the filename, the string before _R1_ or _R2_ should be the same.
         if "_R1_" in filename:
-            key = str(filename).rsplit("_R1_", 1)
+            key = str(filename).rsplit("_R1_", 1)[0]
         elif "_R2_" in filename:
-            key = str(filename).rsplit("_R2_", 1)
+            key = str(filename).rsplit("_R2_", 1)[0]
         else:
             raise ValueError("R1 or R2 is not found in the filename: %s" % filename)
         # Get the URL of the file
