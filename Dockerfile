@@ -1,4 +1,4 @@
-FROM python:3.8.1-buster
+FROM qiuosier/python38-parasail:latest
 
 # Install parasail independently as it is slow
 RUN pip install numpy==1.18.1 parasail==1.1.19
