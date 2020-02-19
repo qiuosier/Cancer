@@ -1,4 +1,10 @@
-numpy
-parasail
-dnaio
-editdistance
+openpyxl==2.4.8
+requests==2.22.0
+lxml==4.4.1
+plotly==4.5.0
+google-cloud-core==1.0.3
+google-cloud-storage==1.23.0
+numpy==1.18.1
+parasail==1.1.19
+dnaio==0.4.1
+editdistance==0.5.3
