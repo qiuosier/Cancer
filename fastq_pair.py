@@ -85,7 +85,7 @@ class FASTQPair:
         self.print_output("%s reads processed." % counter)
         self.print_output("%s reads matched." % counter_matched)
         self.print_output("%s reads unmatched." % counter_unmatched)
-        self.print_output("Output Files:\n %s" % "\n".join([
+        self.print_output("Output Files:\n%s" % "\n".join([
             r1_match_path, r2_match_path, r1_unmatch_path, r2_unmatch_path
         ]))
 
