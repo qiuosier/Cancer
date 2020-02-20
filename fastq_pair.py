@@ -17,7 +17,8 @@ class ReadPairs:
     def trim(self, adapters, error_rate):
         # Trim both read1 and read2 with all adapters before return
         reads = [self.read1, self.read2]
-        matched = [None] * len(reads)
+        # Indicates whether R1 or R2 matches the adapter.
+        matched = [""] * len(reads)
         for i in range(len(reads)):
             read = reads[i]
             for adapter in adapters:
@@ -49,12 +50,14 @@ class FASTQPair:
     def print_output(self, s):
         if self.ident:
             print("%s: %s" % (self.ident, s))
-        print(s)
+        else:
+            print(s)
 
-    def extract_reads_by_adapters(self, adapters, output_dir, error_rate=0.1):
+    def extract_reads_by_adapters(self, adapters, output_dir, error_rate=0.2):
         print("Adapters: %s" % adapters)
         counter = 0
         counter_matched = 0
+        counts = dict()
         counter_unmatched = 0
         r1_match_path = os.path.join(output_dir, "R1_matched.fastq.gz")
         r2_match_path = os.path.join(output_dir, "R2_matched.fastq.gz")
@@ -68,8 +71,26 @@ class FASTQPair:
                 # adapter, trimmed_read1, trimmed_read2 = self.__match_adapters(read1, read2, adapters, error_rate)
                 read_pair = ReadPairs(read1, read2)
                 adapter1, adapter2 = read_pair.trim(adapters, error_rate)
-                adapter = adapter1 or adapter2
+
+                if adapter1:
+                    key = "%s_1" % adapter1
+                    c = counts.get(key, 0)
+                    c += 1
+                    counts[key] = c
+                if adapter2:
+                    key = "%s_2" % adapter2
+                    c = counts.get(key, 0)
+                    c += 1
+                    counts[key] = c
+
+                # The longer adapter has higher priority
+                adapter = adapter1 if len(adapter1) > len(adapter2) else adapter2
                 if adapter:
+                    # Count the number of reads matching the longer adapter
+                    c = counts.get(adapter, 0)
+                    c += 1
+                    counts[adapter] = c
+
                     trimmed_read1 = read_pair.read1
                     trimmed_read2 = read_pair.read2
                     # Sequence matched a barcode
@@ -88,6 +109,9 @@ class FASTQPair:
         self.print_output("Output Files:\n%s" % "\n".join([
             r1_match_path, r2_match_path, r1_unmatch_path, r2_unmatch_path
         ]))
+        counts['unmatched'] = counter_unmatched
+        counts['total'] = counter
+        return counts
 
     # @staticmethod
     # def __match_adapters(read1, read2, adapters, error_rate=0.1):
