@@ -74,7 +74,7 @@ def main():
     sub_parser.add_argument('FASTQ', nargs=2, help="FASTQ R1 and R2 files")
     sub_parser.add_argument('--compare', nargs=2, help="FASTQ R1 and R2 files")
     sub_parser.add_argument('--output', required=True, help="Output Directory")
-    sub_parser.add_argument('--chunk_size', type=int, help="Chunks size in # of K reads")
+    sub_parser.add_argument('--chunk_size', type=int, help="Chunks size in # reads")
 
     sub_parser = subparsers.add_parser("filter_whitelist", help="Filter the variants using a whitelist.")
     sub_parser.add_argument('whitelist', help="VCF/CSV/TSV File containing whitelist variants.")

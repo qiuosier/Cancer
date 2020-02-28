@@ -194,8 +194,6 @@ class FASTQPair:
         # Reads
         diff_seq = os.path.join(output_dir, "diff_seq.txt")
 
-        counter_1 = 0
-        counter_2 = 0
         counter_diff = 0
         # The number of reads that are exactly the same
         counter_same = 0
@@ -204,13 +202,19 @@ class FASTQPair:
         # The number of reads processed.
         counter = 0
 
+        # The number of reads in FASTQ1 only
+        counter_1 = 0
+        # The number of reads in TOTAL in FASTQ2
+        counter_2 = 0
         for fastq1_dict in self.build_index(chunk_size):
+            counter_2 = 0
             with dnaio.open(r1, file2=r2) as fastq2, \
                     open(fastq2_only, 'w') as f2_only, \
                     open(diff_trim, 'w') as f_trim, \
                     open(diff_seq, 'w') as f_diff:
                 for read1, read2 in fastq2:
                     counter += 1
+                    counter_2 += 1
                     if counter % 100000 == 0:
                         print("%s reads processed." % counter)
                     ident = read1.name.split(" ", 1)[0]
@@ -244,7 +248,6 @@ class FASTQPair:
                             f_diff.write("F2R2: " + f2_seq2 + '\n')
                     else:
                         # Read not found in FASTQ1
-                        counter_2 += 1
                         f2_only.write(ident + '\n')
                         f2_only.write("R1: " + read1.sequence + '\n')
                         f2_only.write("R2: " + read2.sequence + '\n')
@@ -265,8 +268,9 @@ class FASTQPair:
 
         print("%d reads in FASTQ2." % counter)
         print("%d reads in FASTQ1 only." % counter_1)
-        print("%d reads in FASTQ2 only." % counter_2)
-        print("%d reads in both pairs." % (counter_same + counter_match + counter_diff))
+        both = counter_same + counter_match + counter_diff
+        print("%d reads in FASTQ2 only." % (counter_2 - both))
+        print("%d reads in both pairs." % both)
         print("%d reads in both pairs are exactly the same." % counter_same)
         print("%d reads in FASTQ1 are a substrings of reads in FASTQ2." % counter_match)
         print("%d reads have difference sequence." % counter_diff)
