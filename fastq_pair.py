@@ -36,24 +36,47 @@ class ReadPairs:
 
 
 class FASTQPair:
+    """Represents a pair of FASTQ files
+    """
 
+    # Output Filenames
     r1_matched_filename = "R1_matched.fastq.gz"
     r2_matched_filename = "R2_matched.fastq.gz"
     r1_unmatched_filename = "R1_unmatched.fastq.gz"
     r2_unmatched_filename = "R2_unmatched.fastq.gz"
 
     def __init__(self, r1, r2, ident=None):
+        """Initializes an object representing a pair of FASTQ files
+
+        Args:
+            r1: FASTQ R1
+            r2: FASTQ R2
+            ident: An optional identifier for the FASTQ pair.
+        """
         self.r1 = r1
         self.r2 = r2
         self.ident = ident
 
     def print_output(self, s):
+        """Prints a message with processor ID
+        This is used to identify the message source when using multi-processing.
+        """
         if self.ident:
             print("%s: %s" % (self.ident, s))
         else:
             print(s)
 
     def extract_reads_by_adapters(self, adapters, output_dir, error_rate=0.2):
+        """Extracts reads from FASTQ files by matching the adapters at the beginning of either R1 or R2.
+        The reads are extracted into two groups, matched or unmatched.
+        The matched adapters are trimmed from the reads.
+
+        Args:
+            adapters (list): A list of strings, each is a barcode adapter.
+            output_dir: The output directory for storing the extracted reads.
+            error_rate: Max percentage of error allowed.
+
+        """
         print("Adapters: %s" % adapters)
         counter = 0
         counter_matched = 0
@@ -113,29 +136,30 @@ class FASTQPair:
         counts['total'] = counter
         return counts
 
-    # @staticmethod
-    # def __match_adapters(read1, read2, adapters, error_rate=0.1):
-    #     for adapter in adapters:
-    #         for read in [read1, read2]:
-    #             # Align adapter to read 1
-    #             result = parasail.sg_de_stats(adapter, read.sequence[:15], 1, 1, FASTQPair.score_matrix)
-    #             if result.matches < 3:
-    #                 continue
-    #             min_score = - math.floor(result.end_ref * error_rate)
-    #             if result.score >= min_score:
-    #                 read.sequence = read.sequence[result.end_ref + 1:]
-    #                 read.qualities = read.qualities[result.end_ref + 1:]
-    #                 return adapter, read1, read2
-    #     return None, read1, read2
+    # Max index size: 10MB keys
+    INDEX_SIZE = 10 * 1000 * 1000
 
-    def build_index(self):
+    def build_index(self, size=None):
+        """Builds an dictionary to index the reads.
+
+        Returns (dict):
+            If size is None, A dictionary, where,
+            key: An identifier of the read pair, this is the first part of the identifier line up to the first space.
+            value: A 2-tuple of read sequence.
+        """
         fastq1_dict = dict()
+        counter = 0
         with dnaio.open(self.r1, file2=self.r2) as fastq1:
             for read1, read2 in fastq1:
                 ident = read1.name.split(" ", 1)[0]
                 fastq1_dict[ident] = (read1.sequence, read2.sequence)
-        print("%d reads in FASTQ1" % len(fastq1_dict.keys()))
-        return fastq1_dict
+                counter += 1
+                if size and len(fastq1_dict.keys()) >= size:
+                    print("%d reads indexed" % counter)
+                    counter = 0
+                    yield fastq1_dict
+        print("%d reads indexed" % counter)
+        yield fastq1_dict
 
     def diff(self, r1, r2, output_dir):
         """Compares the reads with another pair of FASTQ file.
@@ -145,78 +169,113 @@ class FASTQPair:
             r2:
             output_dir
 
+        In this method,
+        the current file (self.r1 and self.r2) is referred as FASTQ1,
+        the file we are comparing with (from r1 and r2 in the input args) is referred as FASTQ2
+
         Returns:
 
         """
-        fastq1_dict = self.build_index()
         fastq1_found = dict()
+
+        # Output filenames
         # Stores reads found in FASTQ1 only
-        diff_fastq1 = os.path.join(output_dir, "diff_fastq1.txt")
+        fastq1_only = os.path.join(output_dir, "fastq1_only.txt")
         # Stores reads found in FASTQ2 only
-        diff_fastq2 = os.path.join(output_dir, "diff_fastq2.txt")
+        fastq2_only = os.path.join(output_dir, "fastq2_only.txt")
+
         # Stores reads found in both FASTQs but with difference sequence
-        diff_seq = os.path.join(output_dir, "diff_seq.txt")
+        # Reads that are trimmed slightly differently
         diff_trim = os.path.join(output_dir, "diff_trim.txt")
+        # Reads
+        diff_seq = os.path.join(output_dir, "diff_seq.txt")
+
         counter_1 = 0
         counter_2 = 0
         counter_diff = 0
+        # The number of reads that are exactly the same
         counter_same = 0
+        # The number of reads that are not exactly the same but matched
         counter_match = 0
+        # The number of reads processed.
         counter = 0
-        with dnaio.open(r1, file2=r2) as fastq2, \
-                open(diff_fastq2, 'w') as diff2, \
-                open(diff_trim, 'w') as difft, \
-                open(diff_seq, 'w') as diffs:
-            for read1, read2 in fastq2:
-                counter += 1
-                if counter % 100000 == 0:
-                    print("%s reads processed." % counter)
-                ident = read1.name.split(" ", 1)[0]
-                if ident in fastq1_dict:
-                    fastq1_found[ident] = True
-                    f1_seq1, f1_seq2 = fastq1_dict.get(ident)
-                    if read1.sequence == f1_seq1 and read2.sequence == f1_seq2:
-                        counter_same += 1
+
+        for fastq1_dict in self.build_index(self.INDEX_SIZE):
+            with dnaio.open(r1, file2=r2) as fastq2, \
+                    open(fastq2_only, 'w') as f2_only, \
+                    open(diff_trim, 'w') as f_trim, \
+                    open(diff_seq, 'w') as f_diff:
+                for read1, read2 in fastq2:
+                    counter += 1
+                    if counter % 100000 == 0:
+                        print("%s reads processed." % counter)
+                    ident = read1.name.split(" ", 1)[0]
+                    f2_seq1 = read1.sequence
+                    f2_seq2 = read2.sequence
+                    if ident in fastq1_dict:
+                        fastq1_found[ident] = True
+                        f1_seq1, f1_seq2 = fastq1_dict.get(ident)
+
+                        if f2_seq1 == f1_seq1 and f2_seq2 == f1_seq2:
+                            # Both reads are exactly the same
+                            counter_same += 1
+                            continue
+                        elif self.__match_trimmed_reads(f2_seq1, f1_seq1) and self.__match_trimmed_reads(f2_seq2, f1_seq2):
+                            # Both reads matches but FASTQ 1 is trimmed more.
+                            f_trim.write(ident + '\n')
+                            f_trim.write("F2R1: " + f2_seq1 + '\n')
+                            f_trim.write("F2R2: " + f2_seq2 + '\n')
+                            counter_match += 1
+                            continue
+
+                        # Reads with different sequences
+                        counter_diff += 1
+                        f_diff.write(ident + '\n')
+                        if not self.__match_trimmed_reads(f2_seq1, f1_seq1):
+                            f_diff.write("F1R1: " + f1_seq1 + '\n')
+                            f_diff.write("F2R1: " + f2_seq1 + '\n')
+                        if not self.__match_trimmed_reads(f2_seq2, f1_seq2):
+                            f_diff.write("F1R2: " + f1_seq2 + '\n')
+                            f_diff.write("F2R2: " + f2_seq2 + '\n')
+                    else:
+                        # Read not found in FASTQ1
+                        counter_2 += 1
+                        f2_only.write(ident + '\n')
+                        f2_only.write("R1: " + read1.sequence + '\n')
+                        f2_only.write("R2: " + read2.sequence + '\n')
+
+            # Reads in FASTQ1 only
+            with open(fastq1_only, 'w') as f1_only:
+                for ident in fastq1_dict.keys():
+                    if ident in fastq1_found:
                         continue
-                    elif self.__match_reads(read1.sequence, f1_seq1) and self.__match_reads(read2.sequence, f1_seq2):
-                        difft.write(ident + '\n')
-                        difft.write("F2R1: " + read1.sequence + '\n')
-                        difft.write("F2R2: " + read2.sequence + '\n')
-                        counter_match += 1
-                        continue
-                    counter_diff += 1
-                    diffs.write(ident + '\n')
-                    if not self.__match_reads(read1.sequence, f1_seq1):
-                        diffs.write("F1R1: " + f1_seq1 + '\n')
-                        diffs.write("F2R1: " + read1.sequence + '\n')
-                    if not self.__match_reads(read2.sequence, f1_seq2):
-                        diffs.write("F1R2: " + f1_seq2 + '\n')
-                        diffs.write("F2R2: " + read2.sequence + '\n')
-                else:
-                    # Read not found in FASTQ1
-                    counter_2 += 1
-                    diff2.write(ident + '\n')
-                    diff2.write("R1: " + read1.sequence + '\n')
-                    diff2.write("R2: " + read2.sequence + '\n')
-        # Reads in FASTQ1 only
-        with open(diff_fastq1, 'w') as diff1:
-            for ident in fastq1_dict.keys():
-                if ident in fastq1_found:
-                    continue
-                counter_1 += 1
-                read1, read2 = fastq1_dict.get(ident)
-                diff1.write(ident + '\n')
-                diff1.write("R1: " + read1 + '\n')
-                diff1.write("R2: " + read2 + '\n')
+                    counter_1 += 1
+                    read1, read2 = fastq1_dict.get(ident)
+                    f1_only.write(ident + '\n')
+                    f1_only.write("R1: " + read1 + '\n')
+                    f1_only.write("R2: " + read2 + '\n')
 
         print("%d reads in FASTQ2." % counter)
         print("%d reads in FASTQ1 only." % counter_1)
         print("%d reads in FASTQ2 only." % counter_2)
         print("%d reads in both pairs." % (counter_same + counter_match + counter_diff))
         print("%d reads in both pairs are exactly the same." % counter_same)
-        print("%d reads in FASTQ1 are a substrings of  reads in FASTQ2." % counter_match)
+        print("%d reads in FASTQ1 are a substrings of reads in FASTQ2." % counter_match)
         print("%d reads have difference sequence." % counter_diff)
 
     @staticmethod
-    def __match_reads(s1, s2):
-        return (len(s1) - len(s2) > 4 and s1.endswith(s2)) or s1 == s2
+    def __match_trimmed_reads(s1, s2):
+        """Compare two reads and see if they matches each other.
+
+        The two sequences are considered as matched if
+            They are exactly the same, OR
+            Read 1 ends with read 2 AND is mo more than 12bp longer than read 2
+
+        Args:
+            s1: Sequence of read 1
+            s2: Sequence of read 2
+
+        Returns:
+
+        """
+        return (s1 == s2) or (len(s1) - len(s2) <= 12 and s1.endswith(s2))

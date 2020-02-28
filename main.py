@@ -7,8 +7,12 @@ from .variants import files
 
 
 class Program:
+    """Contains static methods for sub-commands to start the processing program with args
+    """
     @staticmethod
     def demux_inline(args):
+        """Demultiplex FASTQ files with inline barcodes
+        """
         if len(args.r1) != len(args.r2):
             raise ValueError("R1 and R2 must have the same number of files.")
         fastq_files = []
@@ -21,6 +25,8 @@ class Program:
 
     @staticmethod
     def compare_fastq(args):
+        """Compare FASTQ files
+        """
         if not os.path.exists(args.output):
             os.makedirs(args.output)
         FASTQPair(*args.FASTQ).diff(args.compare[0], args.compare[1], args.output)
