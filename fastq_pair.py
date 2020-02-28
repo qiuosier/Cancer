@@ -136,9 +136,6 @@ class FASTQPair:
         counts['total'] = counter
         return counts
 
-    # Max index size: 10MB keys
-    INDEX_SIZE = 10 * 1000 * 1000
-
     def build_index(self, size=None):
         """Builds an dictionary to index the reads.
 
@@ -161,13 +158,17 @@ class FASTQPair:
         print("%d reads indexed" % counter)
         yield fastq1_dict
 
-    def diff(self, r1, r2, output_dir):
+    # Max index size: 1M keys
+    DEFAULT_CHUNK_SIZE = 1 * 1000 * 1000
+
+    def diff(self, r1, r2, output_dir, chunk_size=DEFAULT_CHUNK_SIZE):
         """Compares the reads with another pair of FASTQ file.
 
         Args:
             r1:
             r2:
-            output_dir
+            output_dir:
+            chunk_size:
 
         In this method,
         the current file (self.r1 and self.r2) is referred as FASTQ1,
@@ -176,6 +177,9 @@ class FASTQPair:
         Returns:
 
         """
+        if not chunk_size:
+            chunk_size = self.DEFAULT_CHUNK_SIZE
+
         fastq1_found = dict()
 
         # Output filenames
@@ -200,7 +204,7 @@ class FASTQPair:
         # The number of reads processed.
         counter = 0
 
-        for fastq1_dict in self.build_index(self.INDEX_SIZE):
+        for fastq1_dict in self.build_index(chunk_size):
             with dnaio.open(r1, file2=r2) as fastq2, \
                     open(fastq2_only, 'w') as f2_only, \
                     open(diff_trim, 'w') as f_trim, \
@@ -220,7 +224,8 @@ class FASTQPair:
                             # Both reads are exactly the same
                             counter_same += 1
                             continue
-                        elif self.__match_trimmed_reads(f2_seq1, f1_seq1) and self.__match_trimmed_reads(f2_seq2, f1_seq2):
+                        elif self.__match_trimmed_reads(f2_seq1, f1_seq1) and \
+                                self.__match_trimmed_reads(f2_seq2, f1_seq2):
                             # Both reads matches but FASTQ 1 is trimmed more.
                             f_trim.write(ident + '\n')
                             f_trim.write("F2R1: " + f2_seq1 + '\n')
@@ -254,6 +259,9 @@ class FASTQPair:
                     f1_only.write(ident + '\n')
                     f1_only.write("R1: " + read1 + '\n')
                     f1_only.write("R2: " + read2 + '\n')
+
+            # Clear the dictionary so that it will take the next chunk.
+            fastq1_dict.clear()
 
         print("%d reads in FASTQ2." % counter)
         print("%d reads in FASTQ1 only." % counter_1)
