@@ -2,6 +2,7 @@ import os
 import logging
 import math
 import dnaio
+import gc
 import parasail
 logger = logging.getLogger(__name__)
 
@@ -266,6 +267,7 @@ class FASTQPair:
 
             # Clear the dictionary so that it will take the next chunk.
             fastq1_dict.clear()
+            gc.collect()
         print("......")
         print("%d reads in FASTQ1." % counter_1)
         print("%d reads in FASTQ2." % counter_2)
