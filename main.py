@@ -2,7 +2,7 @@ import datetime
 import argparse
 import os
 from .fastq_pair import FASTQPair
-from .demux import demux_inline
+from .demux import DemultiplexInline
 from .variants import files
 
 
@@ -21,7 +21,9 @@ class Program:
         adapters = [s.strip() for s in args.barcode]
         if not os.path.exists(args.output):
             os.makedirs(args.output)
-        demux_inline(fastq_files, adapters, args.output, error_rate=args.error_rate, name=args.name)
+        demux_inline = DemultiplexInline(adapters, error_rate=args.error_rate, score=args.score, penalty=args.penalty)
+        demux_inline.run_demultiplex(fastq_files, args.output)
+        demux_inline.save_statistics(args.output, name=args.name)
 
     @staticmethod
     def compare_fastq(args):
@@ -69,6 +71,8 @@ def main():
     sub_parser.add_argument('--output', required=True, help="Output Directory")
     sub_parser.add_argument('--error_rate', type=float, help="Max Error Allowed")
     sub_parser.add_argument('--name', type=str, help="Sample Name for statistics")
+    sub_parser.add_argument('--score', type=int, help="Score for each bp matched")
+    sub_parser.add_argument('--penalty', type=int, help="Penalty for each bp mis-matched")
 
     sub_parser = subparsers.add_parser("compare_fastq", help="Compare reads in two pairs of FASTQ files.")
     sub_parser.add_argument('FASTQ', nargs=2, help="FASTQ R1 and R2 files")

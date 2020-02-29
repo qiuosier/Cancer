@@ -6,8 +6,8 @@ import gc
 import parasail
 logger = logging.getLogger(__name__)
 
-match_score = 2
-score_matrix = parasail.matrix_create("ACGT", match_score, -1)
+match_score = 0
+DEFAULT_SCORE_MATRIX = parasail.matrix_create("ACGTN", match_score, -1)
 
 
 class ReadPairs:
@@ -23,7 +23,7 @@ class ReadPairs:
         for i in range(len(reads)):
             read = reads[i]
             for adapter in adapters:
-                result = parasail.sg_de_stats(adapter, read.sequence[:20], 1, 1, score_matrix)
+                result = parasail.sg_de_stats(adapter, read.sequence[:20], 1, 1, DEFAULT_SCORE_MATRIX)
                 if result.matches <= 5:
                     continue
                 distance = match_score * result.matches - result.score
