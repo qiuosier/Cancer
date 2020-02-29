@@ -156,6 +156,9 @@ class FASTQPair:
                     print("%d reads indexed" % counter)
                     counter = 0
                     yield fastq1_dict
+                    # Clear the dictionary so that it will take the next chunk.
+                    fastq1_dict.clear()
+                    gc.collect()
         print("%d reads indexed" % counter)
         yield fastq1_dict
 
@@ -265,9 +268,6 @@ class FASTQPair:
                     f1_only.write("R1: " + read1 + '\n')
                     f1_only.write("R2: " + read2 + '\n')
 
-            # Clear the dictionary so that it will take the next chunk.
-            fastq1_dict.clear()
-            gc.collect()
         print("......")
         print("%d reads in FASTQ1." % counter_1)
         print("%d reads in FASTQ2." % counter_2)
