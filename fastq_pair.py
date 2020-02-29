@@ -145,9 +145,9 @@ class FASTQPair:
             counter_2 = 0
             counter_1 += len(fastq1_dict.keys())
             with dnaio.open(r1, file2=r2) as fastq2, \
-                    open(fastq2_only, 'w') as f2_only, \
-                    open(diff_trim, 'w') as f_trim, \
-                    open(diff_seq, 'w') as f_diff:
+                    open(fastq2_only, 'a') as f2_only, \
+                    open(diff_trim, 'a') as f_trim, \
+                    open(diff_seq, 'a') as f_diff:
                 for read1, read2 in fastq2:
                     counter_2 += 1
                     if counter_2 % 100000 == 0:
@@ -182,10 +182,12 @@ class FASTQPair:
                             f_diff.write("F1R2: " + f1_seq2 + '\n')
                             f_diff.write("F2R2: " + f2_seq2 + '\n')
                     else:
+                        pass
                         # Read not found in FASTQ1
-                        f2_only.write(ident + '\n')
-                        f2_only.write("R1: " + read1.sequence + '\n')
-                        f2_only.write("R2: " + read2.sequence + '\n')
+                        # TODO: The following does not work if there are multiple chunks
+                        # f2_only.write(ident + '\n')
+                        # f2_only.write("R1: " + read1.sequence + '\n')
+                        # f2_only.write("R2: " + read2.sequence + '\n')
 
             # Reads in FASTQ1 only
             with open(fastq1_only, 'w') as f1_only:
