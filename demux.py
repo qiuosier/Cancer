@@ -4,8 +4,7 @@ import csv
 import math
 import dnaio
 import parasail
-from threading import Lock
-from .fastq_pair import FASTQPair
+from .fastq_pair import FASTQPair, ReadPair
 
 
 class Demultiplex:
@@ -73,7 +72,10 @@ class DemultiplexInline(Demultiplex):
                 dnaio.open(r1_match_path, file2=r2_match_path, mode='w') as out_match, \
                 dnaio.open(r1_unmatch_path, file2=r2_unmatch_path, mode='w') as out_unmatch:
             for read1, read2 in fastq_in:
-                # adapter, trimmed_read1, trimmed_read2 = self.__match_adapters(read1, read2, adapters, error_rate)
+                # Initialize ReadPair to check if read1 and read2 are valid
+                read1, read2 = ReadPair(read1, read2).reads
+                # read1 and read2 are references
+                # The modifications on read1 and read2 will be returned implicitly
                 adapter1, adapter2 = self.trim_adapters(read1, read2, score_matrix)
 
                 if adapter1:

@@ -10,10 +10,44 @@ match_score = 0
 DEFAULT_SCORE_MATRIX = parasail.matrix_create("ACGTN", match_score, -1)
 
 
-class ReadPairs:
+class ReadPair:
     def __init__(self, read1, read2):
         self.read1 = read1
         self.read2 = read2
+
+        arr1 = self.read1.name.split(" ", 1)
+        arr2 = self.read2.name.split(" ", 1)
+
+        if arr1[0] != arr2[0]:
+            raise ValueError(
+                "Identifiers of the read pairs does not match each other.\n"
+                "Read1: %s\n"
+                "Read2: %s" % (arr1[0], arr2[0])
+            )
+
+        self._identifier = arr1[0]
+
+        if len(arr1) > 1 and len(arr2) > 1:
+            pair1 = arr1[1][0]
+            pair2 = arr2[1][0]
+            if pair1 == pair2:
+                raise ValueError("Both reads are pair %s" % pair1)
+
+            # Check if read1 and read2 are switched
+            if pair1 == 2 and pair2 == 1:
+                tmp = self.read1
+                self.read1 = self.read2
+                self.read2 = tmp
+        else:
+            raise ValueError("Invalid read identifiers.\nRead1: %s\nRead2: %s" % (arr1[0], arr2[0]))
+
+    @property
+    def identifier(self):
+        return self._identifier
+
+    @property
+    def reads(self):
+        return self.read1, self.read2
 
     def trim(self, adapters, error_rate):
         # Trim both read1 and read2 with all adapters before return
@@ -34,6 +68,17 @@ class ReadPairs:
                     read.qualities = read.qualities[result.end_ref + 1:]
                     break
         return matched[0], matched[1]
+
+    def check_identifier(self):
+        ident1 = self.read1.name.split(" ", 1)[0]
+        ident2 = self.read2.name.split(" ", 1)[0]
+        if ident1 != ident2:
+            raise ValueError(
+                "Identifiers of the read pairs does not match each other.\n"
+                "Read1: %s\n"
+                "Read2: %s" % (ident1, ident2)
+            )
+        return ident1
 
 
 class FASTQPair:
@@ -79,7 +124,7 @@ class FASTQPair:
         counter = 0
         with dnaio.open(self.r1, file2=self.r2) as fastq1:
             for read1, read2 in fastq1:
-                ident = read1.name.split(" ", 1)[0]
+                ident = ReadPair(read1, read2).identifier
                 fastq1_dict[ident] = (read1.sequence, read2.sequence)
                 counter += 1
                 if size and len(fastq1_dict.keys()) >= size:
@@ -152,7 +197,7 @@ class FASTQPair:
                     counter_2 += 1
                     if counter_2 % 100000 == 0:
                         print("%s reads processed." % counter_2)
-                    ident = read1.name.split(" ", 1)[0]
+                    ident = ReadPair(read1, read2).identifier
                     f2_seq1 = read1.sequence
                     f2_seq2 = read2.sequence
                     if ident in fastq1_dict:
