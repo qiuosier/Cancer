@@ -11,18 +11,16 @@ class Program:
     """
     @staticmethod
     def demux_inline(args):
-        """Demultiplex FASTQ files with inline barcodes
+        """Demultiplex FASTQ files with inline barcode adapters.
         """
         if len(args.r1) != len(args.r2):
             raise ValueError("R1 and R2 must have the same number of files.")
-        fastq_files = []
-        for i in range(len(args.r1)):
-            fastq_files.append((args.r1[i], args.r2[i]))
+
         adapters = [s.strip() for s in args.barcode]
         if not os.path.exists(args.output):
             os.makedirs(args.output)
         demux_inline = DemultiplexInline(adapters, error_rate=args.error_rate, score=args.score, penalty=args.penalty)
-        demux_inline.run_demultiplex(fastq_files, args.output)
+        demux_inline.run_demultiplex(args.r1, args.r2, args.output)
         demux_inline.save_statistics(args.output, name=args.name)
 
     @staticmethod

@@ -34,7 +34,7 @@ class ReadPair:
                 raise ValueError("Both reads are pair %s" % pair1)
 
             # Check if read1 and read2 are switched
-            if pair1 == 2 and pair2 == 1:
+            if str(pair1) == '2' and str(pair2) == '1':
                 tmp = self.read1
                 self.read1 = self.read2
                 self.read2 = tmp
@@ -84,12 +84,6 @@ class ReadPair:
 class FASTQPair:
     """Represents a pair of FASTQ files
     """
-
-    # Output Filenames
-    r1_matched_filename = "R1_matched.fastq.gz"
-    r2_matched_filename = "R2_matched.fastq.gz"
-    r1_unmatched_filename = "R1_unmatched.fastq.gz"
-    r2_unmatched_filename = "R2_unmatched.fastq.gz"
 
     def __init__(self, r1, r2, ident=None):
         """Initializes an object representing a pair of FASTQ files
@@ -173,6 +167,11 @@ class FASTQPair:
         diff_trim = os.path.join(output_dir, "diff_trim.txt")
         # Reads
         diff_seq = os.path.join(output_dir, "diff_seq.txt")
+
+        # Remove existing files.
+        for file_path in [fastq1_only, fastq2_only, diff_trim, diff_seq]:
+            if os.path.exists(file_path):
+                os.remove(file_path)
 
         counter_diff = 0
         # The number of reads that are exactly the same
