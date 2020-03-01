@@ -124,8 +124,9 @@ class FASTQPair:
         counter = 0
         with dnaio.open(self.r1, file2=self.r2) as fastq1:
             for read1, read2 in fastq1:
-                ident = ReadPair(read1, read2).identifier
-                fastq1_dict[ident] = (read1.sequence, read2.sequence)
+                read_pair = ReadPair(read1, read2)
+                ident = read_pair.identifier
+                fastq1_dict[ident] = (read_pair.read1.sequence, read_pair.read2.sequence)
                 counter += 1
                 if size and len(fastq1_dict.keys()) >= size:
                     print("%d reads indexed" % counter)
@@ -197,9 +198,10 @@ class FASTQPair:
                     counter_2 += 1
                     if counter_2 % 100000 == 0:
                         print("%s reads processed." % counter_2)
-                    ident = ReadPair(read1, read2).identifier
-                    f2_seq1 = read1.sequence
-                    f2_seq2 = read2.sequence
+                    read_pair = ReadPair(read1, read2)
+                    ident = read_pair.identifier
+                    f2_seq1 = read_pair.read1.sequence
+                    f2_seq2 = read_pair.read2.sequence
                     if ident in fastq1_dict:
                         fastq1_found[ident] = True
                         f1_seq1, f1_seq2 = fastq1_dict.get(ident)
@@ -240,10 +242,10 @@ class FASTQPair:
                     if ident in fastq1_found:
                         continue
                     counter_1_only += 1
-                    read1, read2 = fastq1_dict.get(ident)
+                    seq1, seq2 = fastq1_dict.get(ident)
                     f1_only.write(ident + '\n')
-                    f1_only.write("R1: " + read1 + '\n')
-                    f1_only.write("R2: " + read2 + '\n')
+                    f1_only.write("R1: " + seq1 + '\n')
+                    f1_only.write("R2: " + seq2 + '\n')
 
         print("......")
         print("%d reads in FASTQ1." % counter_1)
