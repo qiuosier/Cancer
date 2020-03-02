@@ -1,9 +1,12 @@
 import datetime
 import argparse
 import os
+import logging
 from .fastq_pair import FASTQPair
-from .demux import DemultiplexInline
+from .demux import DemultiplexInline, DemultiplexBarcode
 from .variants import files
+from .Aries.outputs import LoggingConfig
+logger = logging.getLogger(__name__)
 
 
 class Program:
@@ -22,6 +25,25 @@ class Program:
         demux_inline = DemultiplexInline(adapters, error_rate=args.error_rate, score=args.score, penalty=args.penalty)
         demux_inline.run_demultiplex(args.r1, args.r2, args.output)
         demux_inline.save_statistics(args.output, name=args.name)
+
+    @staticmethod
+    def demux_barcode(args):
+        if len(args.r1) != len(args.r2):
+            raise ValueError("R1 and R2 must have the same number of files.")
+        if args.barcode:
+            adapters = [s.strip() for s in args.barcode]
+        else:
+            if isinstance(args.r1, list):
+                r1 = args.r1[0]
+            else:
+                r1 = args.r1
+            logger.debug("Determining the barcodes in %s..." % r1)
+            adapters = DemultiplexBarcode.determine_adapters(r1)
+        logger.debug("Barcodes: %s" % adapters)
+        if not os.path.exists(args.output):
+            os.makedirs(args.output)
+        demux_barcode = DemultiplexBarcode(adapters, error_rate=args.error_rate, score=args.score, penalty=args.penalty)
+        demux_barcode.run_demultiplex(args.r1, args.r2, args.output)
 
     @staticmethod
     def compare_fastq(args):
@@ -72,6 +94,16 @@ def main():
     sub_parser.add_argument('--score', type=int, help="Score for each bp matched")
     sub_parser.add_argument('--penalty', type=int, help="Penalty for each bp mis-matched")
 
+    sub_parser = subparsers.add_parser("demux_barcode", help="Demultiplex FASTQ files using Read Barcodes")
+    sub_parser.add_argument('--r1', nargs='+', required=True, help="FASTQ R1 files")
+    sub_parser.add_argument('--r2', nargs='+', required=True, help="FASTQ R2 files")
+    sub_parser.add_argument('--barcode', nargs='+', help="Barcodes")
+    sub_parser.add_argument('--output', required=True, help="Output Directory")
+    sub_parser.add_argument('--error_rate', type=float, help="Max Error Allowed")
+    sub_parser.add_argument('--name', type=str, help="Sample Name for statistics")
+    sub_parser.add_argument('--score', type=int, help="Score for each bp matched")
+    sub_parser.add_argument('--penalty', type=int, help="Penalty for each bp mis-matched")
+
     sub_parser = subparsers.add_parser("compare_fastq", help="Compare reads in two pairs of FASTQ files.")
     sub_parser.add_argument('FASTQ', nargs=2, help="FASTQ R1 and R2 files")
     sub_parser.add_argument('--compare', nargs=2, help="FASTQ R1 and R2 files")
@@ -96,4 +128,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    with LoggingConfig():
+        main()
