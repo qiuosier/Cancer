@@ -50,7 +50,7 @@ class ReadPair:
         """Barcode as it appear in the read name
 
         This is the plain barcode taken from the read name.
-        For illumina sequencer, this is I7 + reverse compliment of I5.
+        For Illumina sequencer, this is I7 + reverse compliment of I5.
 
         """
         barcode1 = self.read1.name.strip().split(":")[-1]

@@ -397,8 +397,8 @@ class DemultiplexBarcode(Demultiplex):
 
     @property
     def output_filenames(self):
-        r1_list = ["R1_%s.fastq.gz" % adapter for adapter in self.adapters]
-        r2_list = ["R2_%s.fastq.gz" % adapter for adapter in self.adapters]
+        r1_list = ["R1/%s.fastq.gz" % adapter for adapter in self.adapters]
+        r2_list = ["R2/%s.fastq.gz" % adapter for adapter in self.adapters]
         return r1_list + r2_list
 
     def match_adapters(self, barcode):
@@ -443,8 +443,14 @@ class DemultiplexBarcode(Demultiplex):
                 self.add_count(counts, barcode)
                 file_obj = file_obj_dict.get(barcode)
                 if not file_obj:
-                    r1_file_path = os.path.join(output_dir, "R1_%s.fastq.gz" % barcode)
-                    r2_file_path = os.path.join(output_dir, "R2_%s.fastq.gz" % barcode)
+                    r1_dir = os.path.join(output_dir, "R1")
+                    r2_dir = os.path.join(output_dir, "R2")
+                    if not os.path.exists(r1_dir):
+                        os.makedirs(r1_dir)
+                    if not os.path.exists(r2_dir):
+                        os.makedirs(r2_dir)
+                    r1_file_path = os.path.join(r1_dir, "%s.fastq.gz" % barcode)
+                    r2_file_path = os.path.join(r2_dir, "%s.fastq.gz" % barcode)
                     logger.debug("Creating files: %s" % [r1_file_path, r2_file_path])
                     file_obj = dnaio.open(r1_file_path, file2=r2_file_path, mode='w')
                     file_obj_dict[barcode] = file_obj
