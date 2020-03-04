@@ -52,6 +52,8 @@ class Program:
         if not os.path.exists(args.output):
             os.makedirs(args.output)
         FASTQPair(*args.FASTQ).diff(args.compare[0], args.compare[1], args.output, args.chunk_size)
+        print("FASTQ1 = The FASTQ pair in the arguments (not option)")
+        print("FASTQ2 = The FASTQ pair in the --compare option")
 
     @staticmethod
     def filter_whitelist(args):
