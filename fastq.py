@@ -237,6 +237,8 @@ class BarcodeStatistics:
     def as_sorted_list(self, max_size=0, reverse=True):
         counts, barcodes = self.sort_data(max_size=max_size, reverse=reverse)
         barcode_list = []
+        if not barcodes:
+            return barcode_list
         for i in range(len(counts)):
             barcode_list.append({
                 "barcode": barcodes[i],
