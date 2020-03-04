@@ -268,8 +268,8 @@ class FASTQPair:
         print("%d reads in FASTQ2 only." % (counter_2 - both))
         print("%d reads in both pairs." % both)
         print("%d reads in both pairs are exactly the same." % counter_same)
-        print("%d reads in FASTQ1 are a substrings of reads in FASTQ2." % counter_match)
-        print("%d reads have difference sequence." % counter_diff)
+        print("%d reads in FASTQ1 are trimmed more at the beginning." % counter_match)
+        print("%d reads have difference sequence or trimmed differently." % counter_diff)
 
     @staticmethod
     def __match_trimmed_reads(s1, s2):
