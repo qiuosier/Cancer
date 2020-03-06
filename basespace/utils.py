@@ -5,7 +5,7 @@ import os
 import json
 import tempfile
 import ast
-from ..Aries.gcp.storage import GSFile
+from ..Aries.storage import StorageFile
 from ..Aries.strings import Base64String
 from ..Aries.web import WebAPI
 
@@ -16,6 +16,8 @@ bs_api = None
 
 
 def get_access_token():
+    """Gets the BaseSpace access token
+    """
     credentials = os.environ.get("BASESPACE_CREDENTIALS")
     if not credentials:
         raise EnvironmentError(
@@ -39,7 +41,7 @@ def build_api_url(relative_url, **kwargs):
     """Builds the URL for BaseSpace API.
 
     Args:
-        endpoint (str): The relative url of BaseSpace API endpoint, e.g. "v1pre3/files/1863963".
+        relative_url (str): The relative url of BaseSpace API endpoint, e.g. "v1pre3/files/1863963".
             In the BaseSpace API response, the API for additional data is usually in the "Href" field.
         **kwargs: Additional parameters for the API. They will be encoded in the GET request URL.
 
@@ -154,7 +156,8 @@ def api_collection(href):
     return items
 
 
-def transfer_file_to_gcloud(gs_prefix, file_id=None, file_info_href=None):
+def transfer_file(to_folder_uri, file_id=None, file_info_href=None):
+    # Determine the file_id, file_info and file_content_href
     if file_id is not None:
         file_info_href = "v1pre3/files/%s" % file_id
         file_content_href = "v1pre3/files/%s/content" % file_id
@@ -162,33 +165,24 @@ def transfer_file_to_gcloud(gs_prefix, file_id=None, file_info_href=None):
         file_id = file_info_href.strip("/").split("/")[-1]
         file_content_href = "%s/content" % file_info_href
     else:
-        logger.error("Either BaseSpace file_id or file_info_href is needed for file transfer.")
-        return None
+        raise ValueError("Either BaseSpace file_id or file_info_href is needed for file transfer.")
+
     file_info = api_response(file_info_href)
-    logger.debug("Transferring file from: %s" % file_content_href)
+    logger.debug("Transferring file from BaseSpace: %s" % file_content_href)
 
     # For FASTQ files, add basespace file ID to filename
     # Each MiSeq run may have multiple FASTQ files with the same name.
     filename = file_info.get("Name")
     if filename.endswith(".fastq.gz"):
         filename = filename.replace(".fastq.gz", "_%s.fastq.gz" % file_id)
-    gs_path = os.path.join(gs_prefix, filename)
 
     # Skip if a file exists and have the same size.
-    gs_file = GSFile(gs_path)
-    gs_blob = gs_file.blob
-    if gs_blob.size != file_info.get("Size"):
-        logger.debug("Downloading %s from BaseSpace..." % filename)
-        local_filename = os.path.join(tempfile.gettempdir(), filename)
-        response = requests.get(build_api_url(file_content_href), stream=True)
-        with open(local_filename, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=1024):
-                if chunk:
-                    f.write(chunk)
-        logger.debug("Uploading %s to %s..." % (filename, gs_path))
-        gs_file.upload_from_file(local_filename)
-        if os.path.exists(local_filename):
-            os.remove(local_filename)
-    else:
-        logger.debug("File %s already in Google Cloud Storage: %s" % (filename, gs_path))
-    return gs_path
+    to_uri = os.path.join(to_folder_uri, filename)
+    dest_file = StorageFile(to_uri)
+    file_size = file_info.get("Size")
+    if file_size and dest_file.exists() and dest_file.size and dest_file.size == file_info.get("Size"):
+        logger.debug("File %s exists at destination: %s" % (filename, to_uri))
+        return to_uri
+    from_uri = build_api_url(file_content_href)
+    StorageFile(from_uri).copy(to_uri)
+    return to_uri

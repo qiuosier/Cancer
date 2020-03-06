@@ -5,7 +5,6 @@ import gzip
 import json
 import logging
 from .Aries.storage import StorageFile
-from .Aries.gcp.storage import GSFile
 from .Aries.visual.plotly import PlotlyFigure
 from .Aries.collections import sort_lists
 from .Aries.tasks import ShellCommand
@@ -68,7 +67,7 @@ class IlluminaFASTQ:
     def __init__(self, file_path):
         file_path = str(file_path)
         if file_path.startswith("gs://"):
-            if not GSFile(file_path).blob.exists():
+            if not StorageFile(file_path).exists():
                 raise FileNotFoundError("File not found at %s." % file_path)
         elif not os.path.exists(file_path):
             raise FileNotFoundError("File not found at %s." % file_path)
