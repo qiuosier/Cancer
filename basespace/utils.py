@@ -70,6 +70,7 @@ def get_response(url):
     Returns: A dictionary containing the the value of the "Response" key in the JSON response.
 
     """
+    logger.debug("BaseSpace API: %s" % url)
     r = requests.get(url)
     if r.status_code == 200:
         return r.json().get("Response")
