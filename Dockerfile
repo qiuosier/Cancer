@@ -10,4 +10,5 @@ COPY . /Cancer
 WORKDIR /Cancer
 RUN git submodule init
 RUN git submodule update
+RUN pip install -r Aries/requirements.txt
 WORKDIR /
