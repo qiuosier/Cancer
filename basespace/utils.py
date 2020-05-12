@@ -5,9 +5,9 @@ import os
 import json
 import tempfile
 import ast
-from ..Aries.storage import StorageFile
-from ..Aries.strings import Base64String
-from ..Aries.web import WebAPI
+from Aries.storage import StorageFile
+from Aries.strings import Base64String
+from Aries.web import WebAPI
 
 logger = logging.getLogger(__name__)
 

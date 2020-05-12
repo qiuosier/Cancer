@@ -4,10 +4,9 @@ import io
 import gzip
 import json
 import logging
-from .Aries.storage import StorageFile
-from .Aries.visual.plotly import PlotlyFigure
-from .Aries.collections import sort_lists
-from .Aries.tasks import ShellCommand
+from Aries.storage import StorageFile
+from Aries.visual.plotly import PlotlyFigure
+from Aries.collections import sort_lists
 from .sequence import Sequence
 logger = logging.getLogger(__name__)
 
@@ -66,24 +65,16 @@ class IlluminaFASTQ:
 
     def __init__(self, file_path):
         file_path = str(file_path)
-        if file_path.startswith("gs://"):
-            if not StorageFile(file_path).exists():
-                raise FileNotFoundError("File not found at %s." % file_path)
-        elif not os.path.exists(file_path):
+        if not StorageFile(file_path).exists():
             raise FileNotFoundError("File not found at %s." % file_path)
+
         self.file_path = file_path
         logger.debug("Initialized Illumina FASTQ object.")
 
     def peek_barcode(self):
-        if self.file_path.startswith("gs://"):
-            cmd = "gsutil cat %s | zcat | head -n 4000" % self.file_path
-            job = ShellCommand(cmd)
-            job.run()
-            f = io.StringIO(job.std_out)
-        else:
-            f = open(self.file_path, 'r')
-        barcode_dict = self.__process_barcode(f, self.__count_barcode)
-        f.close()
+        with StorageFile.init(self.file_path, 'rb') as f:
+            with gzip.GzipFile(fileobj=f) as gz:
+                barcode_dict = self.__process_barcode(gz, self.__count_barcode)
         return barcode_dict
 
     @staticmethod

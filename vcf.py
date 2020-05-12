@@ -1,5 +1,5 @@
 import logging
-from .Aries.storage import StorageFile
+from Aries.storage import StorageFile
 from .variants.files import CSVVariants
 logger = logging.getLogger(__name__)
 

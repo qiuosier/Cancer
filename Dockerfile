@@ -7,8 +7,4 @@ ADD requirements.txt requirements.txt
 RUN pip install -r /requirements.txt
 
 COPY . /Cancer
-WORKDIR /Cancer
-RUN git submodule init
-RUN git submodule update
-RUN pip install -r Aries/requirements.txt
 WORKDIR /

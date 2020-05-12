@@ -1,7 +1,7 @@
 import csv
 import copy
 import sys
-from ..Aries.table import TableCSVFile
+from Aries.table import TableCSVFile
 
 
 class VCFVariant:

@@ -5,7 +5,7 @@ import logging
 from .fastq_pair import FASTQPair
 from .demux import DemultiplexInline, DemultiplexBarcode
 from .variants import files
-from .Aries.outputs import LoggingConfig
+from Aries.outputs import LoggingConfig
 logger = logging.getLogger(__name__)
 
 

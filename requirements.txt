@@ -10,3 +10,4 @@ google-cloud-core==1.3.0
 google-cloud-storage==1.26.0
 google-cloud-logging==1.15.0
 boto3==1.12.16
+Astrology-Aries
