@@ -1,6 +1,5 @@
 import os
 import re
-import io
 import gzip
 import json
 import logging
@@ -72,9 +71,23 @@ class IlluminaFASTQ:
         logger.debug("Initialized Illumina FASTQ object.")
 
     def peek_barcode(self):
+        barcode_dict = {}
         with StorageFile.init(self.file_path, 'rb') as f:
             with gzip.GzipFile(fileobj=f) as gz:
-                barcode_dict = self.__process_barcode(gz, self.__count_barcode)
+                for i, line in enumerate(gz, start=1):
+                    if i > 4000:
+                        break
+                    # The line containing barcode starts with @
+                    if not line.startswith(b"@"):
+                        continue
+                    if isinstance(line, bytes):
+                        line = line.decode()
+                    # Raw barcode
+                    barcode = line.strip().split(":")[-1]
+
+                    if re.match(self.dual_index_pattern, barcode):
+                        barcode = self.convert_barcode(barcode)
+                        barcode_dict[barcode] = self.__count_barcode(barcode_dict, barcode, i)
         return barcode_dict
 
     @staticmethod
