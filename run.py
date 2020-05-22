@@ -1,0 +1,7 @@
+from Aries.outputs import LoggingConfig
+from .main import main
+
+
+if __name__ == '__main__':
+    with LoggingConfig():
+        main()
