@@ -18,6 +18,16 @@ class Demultiplex:
 
     DEFAULT_ERROR_RATE = 0.1
 
+    @staticmethod
+    def parse_barcode_outputs(barcode_outputs):
+        barcode_dict = {}
+        for output in barcode_outputs:
+            arr = str(output).split("=", 1)
+            barcode = arr[0].strip()
+            file_path = arr[1] if len(arr) > 1 else None
+            barcode_dict[barcode] = file_path
+        return barcode_dict
+
     def __init__(self, adapters, error_rate=None, score=1, penalty=10):
         self.adapters = adapters
         self.min_match_length = round(min([len(adapter) / 2 for adapter in adapters]))
@@ -169,13 +179,13 @@ class Demultiplex:
         # TODO: Remove temp outputs
         return counts
 
-    def run_demultiplex(self, r1_list, r2_list, output_dir):
-        """Demultiplex by inline barcode adapters and concatenate FASTQ files.
+    def run_demultiplex(self, r1_list, r2_list, barcode_dict):
+        """Demultiplex by barcode adapters and concatenate FASTQ files.
 
         Args:
             r1_list (list): A list of file paths, each is a FASTQ with forward reads.
             r2_list (list): A list of file paths, each is a FASTQ with reverse compliment reads.
-            output_dir: Output directory
+            barcode_dict:
 
         Returns:
 
@@ -183,16 +193,11 @@ class Demultiplex:
         # Pair the FASTQ files from r1_list and r2_list by the identifier of the first read
         fastq_files = self.pair_fastq_files(r1_list, r2_list)
 
-        # Creates output directory if it does not exist.
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        logger.info("Demultiplexing to %s..." % output_dir)
-
         pairs_count = len(fastq_files)
         if pairs_count == 1:
-            counts = self.demultiplex_fastq_pair(fastq_files[0][0], fastq_files[0][1], output_dir)
+            counts = self.demultiplex_fastq_pair(fastq_files[0][0], fastq_files[0][1], barcode_dict)
         else:
-            counts = self.multi_processing(fastq_files, output_dir)
+            counts = self.multi_processing(fastq_files, barcode_dict)
         self.update_counts(counts)
         logger.info(self.counts)
         return counts
@@ -221,21 +226,11 @@ class DemultiplexInline(Demultiplex):
 
     """
 
-    # Output Filenames
-    r1_matched_filename = "R1_matched.fastq.gz"
-    r2_matched_filename = "R2_matched.fastq.gz"
-    r1_unmatched_filename = "R1_unmatched.fastq.gz"
-    r2_unmatched_filename = "R2_unmatched.fastq.gz"
-
     DEFAULT_ERROR_RATE = 0.2
 
     @property
     def output_filenames(self):
         return [
-            self.r1_matched_filename,
-            self.r2_matched_filename,
-            self.r1_unmatched_filename,
-            self.r2_unmatched_filename
         ]
 
     def trim_adapters(self, read1, read2, score_matrix=None):
@@ -294,7 +289,7 @@ class DemultiplexInline(Demultiplex):
         # read1 and read2 are preserved implicitly
         return matched[0], matched[1]
 
-    def __process_read_pair(self, read1, read2, counts, out_match, out_unmatch, score_matrix):
+    def __process_read_pair(self, read1, read2, score_matrix, fp_dict, counts):
         # Initialize ReadPair to check if read1 and read2 are valid
         read1, read2 = ReadPair(read1, read2).reads
         # read1 and read2 are references
@@ -313,13 +308,17 @@ class DemultiplexInline(Demultiplex):
             self.add_count(counts, adapter)
             # Sequence matched a barcode
             self.add_count(counts, 'matched')
-            out_match.write(read1, read2)
+            out_match = fp_dict.get(adapter)
+            if out_match:
+                out_match.write(read1, read2)
         else:
             # Sequence does not match a barcode
             self.add_count(counts, 'unmatched')
-            out_unmatch.write(read1, read2)
+            out_unmatch = fp_dict.get('NO_MATCH')
+            if out_unmatch:
+                out_unmatch.write(read1, read2)
 
-    def demultiplex_fastq_pair(self, r1, r2, output_dir, ident=None):
+    def demultiplex_fastq_pair(self, r1, r2, barcode_dict, ident=None):
         """Demultiplex a single pair of FASTQ files.
 
         Reads matching any barcode in self.adapters will be extracted to a pair of FASTQ files.
@@ -328,7 +327,7 @@ class DemultiplexInline(Demultiplex):
         Args:
             r1: FASTQ R1 path.
             r2: FASTQ R2 path.
-            output_dir: Output directory for the output files.
+            barcode_dict (dict): A dictionary where each key is a barcode and each value is the output file path.
             ident: Identifier for the demultiplex process.
 
         Returns:
@@ -338,29 +337,37 @@ class DemultiplexInline(Demultiplex):
         logger.debug("Adapters: %s" % self.adapters)
         counter = 0
         counts = dict(matched=0, unmatched=0, total=0)
-        r1_match_path = os.path.join(output_dir, self.r1_matched_filename)
-        r2_match_path = os.path.join(output_dir, self.r2_matched_filename)
-        r1_unmatch_path = os.path.join(output_dir, self.r1_unmatched_filename)
-        r2_unmatch_path = os.path.join(output_dir, self.r2_unmatched_filename)
 
-        # score_matrix is initialized here because it cannot be pickled
-        score_matrix = parasail.matrix_create("ACGTN", self.score, -1 * self.penalty)
+        fp_dict = {}
+        path_dict = {}
+        try:
+            for barcode, file_path in barcode_dict.items():
+                if not file_path:
+                    fp_dict[barcode] = None
+                if file_path in path_dict.keys():
+                    fp_dict[barcode] = path_dict[file_path]
+                else:
+                    fp = dnaio.open(file_path + ".R1.fastq.gz", file2=file_path + ".R2.fastq.gz", mode='w')
+                    path_dict[file_path] = fp
+                    fp_dict[barcode] = fp
+            logger.debug(fp_dict)
+            # score_matrix is initialized here because it cannot be pickled
+            score_matrix = parasail.matrix_create("ACGTN", self.score, -1 * self.penalty)
 
-        self.print_output("Demultiplexing %s and %s..." % (r1, r2), ident)
-        with dnaio.open(r1, file2=r2) as fastq_in, \
-                dnaio.open(r1_match_path, file2=r2_match_path, mode='w') as out_match, \
-                dnaio.open(r1_unmatch_path, file2=r2_unmatch_path, mode='w') as out_unmatch:
-            for read1, read2 in fastq_in:
-                self.__process_read_pair(read1, read2, counts, out_match, out_unmatch, score_matrix)
-                counter += 1
-                if counter % 100000 == 0:
-                    self.print_output("%s reads processed." % counter, ident)
-        self.print_output("%s reads processed." % counter, ident)
-        self.print_output("%s reads matched." % counts.get("matched", 0), ident)
-        self.print_output("%s reads unmatched." % counts.get("unmatched", 0), ident)
-        self.print_output("Output Files:\n%s" % "\n".join([
-            r1_match_path, r2_match_path, r1_unmatch_path, r2_unmatch_path
-        ]), ident)
+            self.print_output("Demultiplexing %s and %s..." % (r1, r2), ident)
+            with dnaio.open(r1, file2=r2) as fastq_in:
+                for read1, read2 in fastq_in:
+                    self.__process_read_pair(read1, read2, score_matrix, fp_dict, counts)
+                    counter += 1
+                    if counter % 100000 == 0:
+                        self.print_output("%s reads processed." % counter, ident)
+            self.print_output("%s reads processed." % counter, ident)
+            self.print_output("%s reads matched." % counts.get("matched", 0), ident)
+            self.print_output("%s reads unmatched." % counts.get("unmatched", 0), ident)
+            self.print_output("Output Files:\n%s" % "\n".join(barcode_dict.values()), ident)
+        finally:
+            for fp in fp_dict.values():
+                fp.close()
 
         counts['total'] = counter
         return counts
