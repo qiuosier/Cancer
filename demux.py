@@ -13,6 +13,35 @@ from .fastq import IlluminaFASTQ, BarcodeStatistics
 logger = logging.getLogger(__name__)
 
 
+class DemultiplexWriter(dict):
+
+    @staticmethod
+    def pair_end_filenames(prefix):
+        return prefix + ".R1.fastq.gz", prefix + ".R2.fastq.gz"
+
+    def __init__(self, barcode_dict):
+        self.barcode_dict = barcode_dict
+        self.path_dict = {}
+        super().__init__()
+
+    def __enter__(self):
+        for barcode, file_path in self.barcode_dict.items():
+            if not file_path:
+                self[barcode] = None
+            if file_path in self.path_dict.keys():
+                self[barcode] = self.path_dict[file_path]
+            else:
+                r1_out, r2_out = DemultiplexWriter.pair_end_filenames(file_path)
+                fp = dnaio.open(r1_out, file2=r2_out, mode='w')
+                self.path_dict[file_path] = fp
+                self[barcode] = fp
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for fp in self.values():
+            fp.close()
+
+
 class Demultiplex:
     """Base class for demultiplexing FASTQ files.
     """
@@ -120,17 +149,13 @@ class Demultiplex:
         return fastq_files
 
     @staticmethod
-    def get_output_filenames(prefix):
-        return prefix + ".R1.fastq.gz", prefix + ".R2.fastq.gz"
-
-    @staticmethod
     def concatenate_fastq(prefix_dict):
         """Concatenates the FASTQ files in a list of directories.
         """
         logger.debug("Concatenating files: %s" % prefix_dict)
         for prefix, prefix_list in prefix_dict.items():
-            r1, r2 = Demultiplex.get_output_filenames(prefix)
-            pair_list = [Demultiplex.get_output_filenames(p) for p in prefix_list]
+            r1, r2 = DemultiplexWriter.pair_end_filenames(prefix)
+            pair_list = [DemultiplexWriter.pair_end_filenames(p) for p in prefix_list]
 
             cmd = "cat %s > %s" % (" ".join(p[0] for p in pair_list), r1)
             os.system(cmd)
@@ -207,7 +232,7 @@ class Demultiplex:
         fastq_files = self.pair_fastq_files(r1_list, r2_list)
 
         pairs_count = len(fastq_files)
-        if pairs_count == 0:
+        if pairs_count == 1:
             counts = self.demultiplex_fastq_pair(fastq_files[0][0], fastq_files[0][1], barcode_dict)
         else:
             counts = self.multi_processing(fastq_files, barcode_dict)
@@ -345,20 +370,7 @@ class DemultiplexInline(Demultiplex):
         counter = 0
         counts = dict(matched=0, unmatched=0, total=0)
 
-        fp_dict = {}
-        path_dict = {}
-        try:
-            for barcode, file_path in barcode_dict.items():
-                if not file_path:
-                    fp_dict[barcode] = None
-                if file_path in path_dict.keys():
-                    fp_dict[barcode] = path_dict[file_path]
-                else:
-                    r1_out, r2_out = self.get_output_filenames(file_path)
-                    fp = dnaio.open(r1_out, file2=r2_out, mode='w')
-                    path_dict[file_path] = fp
-                    fp_dict[barcode] = fp
-
+        with DemultiplexWriter(barcode_dict) as fp_dict:
             # score_matrix is initialized here because it cannot be pickled
             score_matrix = parasail.matrix_create("ACGTN", self.score, -1 * self.penalty)
 
@@ -372,10 +384,7 @@ class DemultiplexInline(Demultiplex):
             self.print_output("%s reads processed." % counter, ident)
             self.print_output("%s reads matched." % counts.get("matched", 0), ident)
             self.print_output("%s reads unmatched." % counts.get("unmatched", 0), ident)
-            self.print_output("Output Prefixes:\n%s" % "\n".join(path_dict.keys()), ident)
-        finally:
-            for fp in fp_dict.values():
-                fp.close()
+            self.print_output("Output Prefixes:\n%s" % "\n".join(fp_dict.path_dict.keys()), ident)
 
         counts['total'] = counter
         return counts
@@ -410,12 +419,6 @@ class DemultiplexBarcode(Demultiplex):
         super().__init__(adapters, error_rate, score, penalty)
         self.max_error = {adapter: math.floor(len(adapter) * self.error_rate) for adapter in self.adapters}
 
-    @property
-    def output_filenames(self):
-        r1_list = ["R1/%s.fastq.gz" % adapter for adapter in self.adapters]
-        r2_list = ["R2/%s.fastq.gz" % adapter for adapter in self.adapters]
-        return r1_list + r2_list
-
     def match_adapters(self, barcode):
         for adapter in self.adapters:
             if editdistance.eval(barcode, adapter) < self.max_error.get(adapter, 0):
@@ -438,40 +441,28 @@ class DemultiplexBarcode(Demultiplex):
         barcode_list = BarcodeStatistics(barcode_dict).major_barcodes()
         return barcode_list
 
-    def demultiplex_fastq_pair(self, r1, r2, output_dir, ident=None):
+    def demultiplex_fastq_pair(self, r1, r2, barcode_dict, ident=None):
         counts = dict()
-        # A dictionary to hold the opened file obj
-        file_obj_dict = dict()
         counter = 0
-        with dnaio.open(r1, file2=r2) as fastq_in:
-            for read1, read2 in fastq_in:
-                counter += 1
-                if counter % 100000 == 0:
-                    self.print_output("%s reads processed." % counter, ident)
-                barcode = ReadPair(read1, read2).barcode
-                if re.match(IlluminaFASTQ.dual_index_pattern, barcode):
-                    barcode = IlluminaFASTQ.convert_barcode(barcode)
-                barcode = self.match_adapters(barcode)
-                if not barcode:
-                    self.add_count(counts, "unmatched")
-                    continue
-                self.add_count(counts, barcode)
-                file_obj = file_obj_dict.get(barcode)
-                if not file_obj:
-                    r1_dir = os.path.join(output_dir, "R1")
-                    r2_dir = os.path.join(output_dir, "R2")
-                    if not os.path.exists(r1_dir):
-                        os.makedirs(r1_dir)
-                    if not os.path.exists(r2_dir):
-                        os.makedirs(r2_dir)
-                    r1_file_path = os.path.join(r1_dir, "%s.fastq.gz" % barcode)
-                    r2_file_path = os.path.join(r2_dir, "%s.fastq.gz" % barcode)
-                    logger.debug("Creating files: %s" % [r1_file_path, r2_file_path])
-                    file_obj = dnaio.open(r1_file_path, file2=r2_file_path, mode='w')
-                    file_obj_dict[barcode] = file_obj
-                # Write the barcode line
-                file_obj.write(read1, read2)
-        for file_obj in file_obj_dict.values():
-            file_obj.close()
+        with DemultiplexWriter(barcode_dict) as fp_dict:
+            with dnaio.open(r1, file2=r2) as fastq_in:
+                for read1, read2 in fastq_in:
+                    counter += 1
+                    if counter % 100000 == 0:
+                        self.print_output("%s reads processed." % counter, ident)
+                    barcode = ReadPair(read1, read2).barcode
+                    if re.match(IlluminaFASTQ.dual_index_pattern, barcode):
+                        barcode = IlluminaFASTQ.convert_barcode(barcode)
+                    barcode = self.match_adapters(barcode)
+                    if not barcode:
+                        # TODO: Write unmatched reads.
+                        self.add_count(counts, "unmatched")
+                        continue
+                    self.add_count(counts, barcode)
+                    file_obj = fp_dict.get(barcode)
+                    if file_obj:
+                        # Write the barcode line
+                        file_obj.write(read1, read2)
+
         counts["total"] = counter
         return counts

@@ -43,8 +43,10 @@ class Program:
         logger.debug("Barcodes: %s" % adapters)
         if not os.path.exists(args.output):
             os.makedirs(args.output)
+        # Use barcode as output file prefix
+        barcode_dict = {adapter: os.path.join(args.output, adapter) for adapter in adapters}
         demux_barcode = DemultiplexBarcode(adapters, error_rate=args.error_rate, score=args.score, penalty=args.penalty)
-        demux_barcode.run_demultiplex(args.r1, args.r2, args.output)
+        demux_barcode.run_demultiplex(args.r1, args.r2, barcode_dict)
 
     @staticmethod
     def compare_fastq(args):
