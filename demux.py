@@ -7,6 +7,7 @@ import parasail
 import editdistance
 import re
 import logging
+import tempfile
 from .fastq_pair import ReadPair
 from .fastq import IlluminaFASTQ, BarcodeStatistics
 logger = logging.getLogger(__name__)
@@ -46,11 +47,7 @@ class Demultiplex:
         # Whether to use this in the sub-class is optional.
         self.counts = {}
 
-    @property
-    def output_filenames(self):
-        raise NotImplementedError()
-
-    def demultiplex_fastq_pair(self, r1, r2, output_dir, ident=None):
+    def demultiplex_fastq_pair(self, r1, r2, barcode_dict, ident=None):
         raise NotImplementedError()
 
     def update_counts(self, counts):
@@ -122,26 +119,30 @@ class Demultiplex:
             fastq_files.append((r1_dict[key], r2_dict[key]))
         return fastq_files
 
-    def concatenate_fastq(self, output_dir_list, output_dir):
+    @staticmethod
+    def get_output_filenames(prefix):
+        return prefix + ".R1.fastq.gz", prefix + ".R2.fastq.gz"
+
+    @staticmethod
+    def concatenate_fastq(prefix_dict):
         """Concatenates the FASTQ files in a list of directories.
         """
-        logger.debug("Concatenating %s pairs of output files..." % len(output_dir_list))
-        for filename in self.output_filenames:
-            cmd = "cat %s > %s" % (
-                " ".join([
-                    os.path.join(out, filename) for out in output_dir_list
-                    if os.path.exists(os.path.join(out, filename))
-                ]),
-                os.path.join(output_dir, filename)
-            )
+        logger.debug("Concatenating files: %s" % prefix_dict)
+        for prefix, prefix_list in prefix_dict.items():
+            r1, r2 = Demultiplex.get_output_filenames(prefix)
+            pair_list = [Demultiplex.get_output_filenames(p) for p in prefix_list]
+
+            cmd = "cat %s > %s" % (" ".join(p[0] for p in pair_list), r1)
+            os.system(cmd)
+            cmd = "cat %s > %s" % (" ".join(p[1] for p in pair_list), r2)
             os.system(cmd)
 
-    def multi_processing(self, fastq_files, output_dir):
+    def multi_processing(self, fastq_files, barcode_dict):
         """Demultiplex a list of FASTQ file pairs. The corresponding FASTQ files will be concatenated.
 
         Args:
             fastq_files: A list of 2-tuples, each stores the paths of a pair of FASTQ files.
-            output_dir: Output directory.
+            barcode_dict (dict):
 
         Returns:
             A dictionary containing the statistics of the demultiplex process (see self.counts).
@@ -152,31 +153,43 @@ class Demultiplex:
         pool_size = min(pairs_count, os.cpu_count())
         pool = multiprocessing.Pool(pool_size)
         jobs = []
-        output_dir_list = []
+        output_list = []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logger.debug("Demultiplexing using %s processes..." % pool_size)
+            for i in range(pairs_count):
+                fastq_pair = fastq_files[i]
+                ident = "Process_%s" % i
 
-        logger.debug("Demultiplexing using %s processes..." % pool_size)
-        for i in range(pairs_count):
-            fastq_pair = fastq_files[i]
-            sub_output_dir = os.path.join(output_dir, str(i))
-            if not os.path.exists(sub_output_dir):
-                os.mkdir(sub_output_dir)
-            output_dir_list.append(sub_output_dir)
-            ident = "Process %s" % i
-            job = pool.apply_async(
-                self.demultiplex_fastq_pair,
-                (fastq_pair[0], fastq_pair[1], sub_output_dir, ident)
-            )
-            jobs.append(job)
+                output_dict = {k: os.path.join(temp_dir, "%s_%s" % (k, ident)) for k in barcode_dict.keys()}
+                output_list.append(output_dict)
 
-        # Wait for the jobs to be finished and collect the statistics.
-        results = [job.get() for job in jobs]
-        counts = dict()
-        for r in results:
-            for k, v in r.items():
-                counts[k] = counts.get(k, 0) + v
+                job = pool.apply_async(
+                    self.demultiplex_fastq_pair,
+                    (fastq_pair[0], fastq_pair[1], output_dict, ident)
+                )
+                jobs.append(job)
 
-        self.concatenate_fastq(output_dir_list, output_dir)
-        # TODO: Remove temp outputs
+            # Wait for the jobs to be finished and collect the statistics.
+            results = [job.get() for job in jobs]
+            counts = dict()
+            for r in results:
+                for k, v in r.items():
+                    counts[k] = counts.get(k, 0) + v
+
+            # path_dict is a dict storing the final output paths as keys, and
+            # each value is a list of files (paths) to be concatenated.
+            path_dict = {}
+            for barcode, file_path in barcode_dict.items():
+                # The following code will merge the barcodes pointing to the same file path
+                path_list = path_dict.get(file_path, [])
+                path_list.extend([
+                    output_dict.get(barcode)
+                    for output_dict in output_list
+                    if output_dict.get(barcode)
+                ])
+                path_dict[file_path] = path_list
+
+            self.concatenate_fastq(path_dict)
         return counts
 
     def run_demultiplex(self, r1_list, r2_list, barcode_dict):
@@ -194,7 +207,7 @@ class Demultiplex:
         fastq_files = self.pair_fastq_files(r1_list, r2_list)
 
         pairs_count = len(fastq_files)
-        if pairs_count == 1:
+        if pairs_count == 0:
             counts = self.demultiplex_fastq_pair(fastq_files[0][0], fastq_files[0][1], barcode_dict)
         else:
             counts = self.multi_processing(fastq_files, barcode_dict)
@@ -206,32 +219,26 @@ class Demultiplex:
 class DemultiplexInline(Demultiplex):
     """Demultiplex FASTQ files by Inline barcode at the beginning of the reads
 
-    Attributes:
-        counts: A dictionary storing the demultiplex statistics, which includes the following keys:
-            matched: the number of read pairs matched at least ONE of the adapters
-            unmatched: the number of read pairs matching NONE of the adapters
-            total: total number of read pairs processed
-            Three keys for each adapter, i.e. BARCODE, BARCODE_1 and BARCODE_2
-            BARCODE stores the number of reads matching the corresponding adapter.
-            BARCODE_1 stores the number of forward reads (pair 1) matching the corresponding adapter.
-            BARCODE_2 stores the number of reverse-compliment reads (pair 2) matching the corresponding adapter.
+    self.counts will be a dictionary storing the demultiplex statistics, which includes the following keys:
+        matched: the number of read pairs matched at least ONE of the adapters
+        unmatched: the number of read pairs matching NONE of the adapters
+        total: total number of read pairs processed
+        Three keys for each adapter, i.e. BARCODE, BARCODE_1 and BARCODE_2
+        BARCODE stores the number of reads matching the corresponding adapter.
+        BARCODE_1 stores the number of forward reads (pair 1) matching the corresponding adapter.
+        BARCODE_2 stores the number of reverse-compliment reads (pair 2) matching the corresponding adapter.
 
-            For the values corresponding to BARCODE keys,
-                each READ PAIR will only be counted once even if it is matching multiple adapters.
-                The longer barcode will be used if the two reads in a pair is matching different adapters.
+        For the values corresponding to BARCODE keys,
+            each READ PAIR will only be counted once even if it is matching multiple adapters.
+            The longer barcode will be used if the two reads in a pair is matching different adapters.
 
-            For the values corresponding to BARCODE_1 and BARCODE_2 keys,
-                each READ will be counted once.
-                The first barcode in self.adapters will be used if the read is matching multiple adapters.
+        For the values corresponding to BARCODE_1 and BARCODE_2 keys,
+            each READ will be counted once.
+            The first barcode in self.adapters will be used if the read is matching multiple adapters.
 
     """
 
     DEFAULT_ERROR_RATE = 0.2
-
-    @property
-    def output_filenames(self):
-        return [
-        ]
 
     def trim_adapters(self, read1, read2, score_matrix=None):
         """Checks if the beginning of the reads in a read pair matches any adapter.
@@ -347,10 +354,11 @@ class DemultiplexInline(Demultiplex):
                 if file_path in path_dict.keys():
                     fp_dict[barcode] = path_dict[file_path]
                 else:
-                    fp = dnaio.open(file_path + ".R1.fastq.gz", file2=file_path + ".R2.fastq.gz", mode='w')
+                    r1_out, r2_out = self.get_output_filenames(file_path)
+                    fp = dnaio.open(r1_out, file2=r2_out, mode='w')
                     path_dict[file_path] = fp
                     fp_dict[barcode] = fp
-            logger.debug(fp_dict)
+
             # score_matrix is initialized here because it cannot be pickled
             score_matrix = parasail.matrix_create("ACGTN", self.score, -1 * self.penalty)
 
@@ -364,7 +372,7 @@ class DemultiplexInline(Demultiplex):
             self.print_output("%s reads processed." % counter, ident)
             self.print_output("%s reads matched." % counts.get("matched", 0), ident)
             self.print_output("%s reads unmatched." % counts.get("unmatched", 0), ident)
-            self.print_output("Output Files:\n%s" % "\n".join(barcode_dict.values()), ident)
+            self.print_output("Output Prefixes:\n%s" % "\n".join(path_dict.keys()), ident)
         finally:
             for fp in fp_dict.values():
                 fp.close()

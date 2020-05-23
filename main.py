@@ -21,7 +21,7 @@ class Program:
 
         barcode_dict = DemultiplexBarcode.parse_barcode_outputs(args.barcode)
         demux_inline = DemultiplexInline(
-            barcode_dict.keys(), error_rate=args.error_rate, score=args.score, penalty=args.penalty
+            list(barcode_dict.keys()), error_rate=args.error_rate, score=args.score, penalty=args.penalty
         )
         barcode_dict["NO_MATCH"] = args.unmatched
         demux_inline.run_demultiplex(args.r1, args.r2, barcode_dict)
@@ -90,7 +90,8 @@ def main():
     sub_parser = subparsers.add_parser("demux_inline", help="Demultiplex FASTQ files using Inline Barcodes")
     sub_parser.add_argument('--r1', nargs='+', required=True, help="FASTQ R1 files")
     sub_parser.add_argument('--r2', nargs='+', required=True, help="FASTQ R2 files")
-    sub_parser.add_argument('--barcode', nargs='+', help="Inline Barcodes in the format of BARCODE=PATH")
+    sub_parser.add_argument('--barcode', nargs='+',
+                            help="Barcode and the output file prefix in the format of BARCODE=PREFIX")
     sub_parser.add_argument('--unmatched', type=str, help="File path for saving the unmatched reads.")
     # sub_parser.add_argument('--output', required=True, help="Output Directory")
     sub_parser.add_argument('--name', type=str, help="Sample Name for statistics")
@@ -101,7 +102,8 @@ def main():
     sub_parser = subparsers.add_parser("demux_barcode", help="Demultiplex FASTQ files using Read Barcodes")
     sub_parser.add_argument('--r1', nargs='+', required=True, help="FASTQ R1 files")
     sub_parser.add_argument('--r2', nargs='+', required=True, help="FASTQ R2 files")
-    sub_parser.add_argument('--barcode', nargs='+', help="Barcodes")
+    sub_parser.add_argument('--barcode', nargs='+',
+                            help="Barcode and the output file prefix in the format of BARCODE=PREFIX")
     sub_parser.add_argument('--output', required=True, help="Output Directory")
     sub_parser.add_argument('--name', type=str, help="Sample Name for statistics")
     sub_parser.add_argument('--error_rate', type=float, help="Max Error Allowed")
