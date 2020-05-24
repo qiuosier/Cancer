@@ -76,6 +76,16 @@ class Demultiplex:
         # Whether to use this in the sub-class is optional.
         self.counts = {}
 
+    def create_score_matrix(self):
+        return parasail.matrix_create("ACGTN", self.score, -1 * self.penalty)
+
+    def semi_global_distance(self, s1, s2):
+        score_matrix = self.create_score_matrix()
+        result = parasail.sg_de_stats(
+            s1, s2, self.penalty, self.penalty, score_matrix
+        )
+        return (self.score * result.matches - result.score) / self.penalty
+
     def demultiplex_fastq_pair(self, r1, r2, barcode_dict, ident=None):
         raise NotImplementedError()
 
@@ -297,7 +307,7 @@ class DemultiplexInline(Demultiplex):
 
         """
         if not score_matrix:
-            score_matrix = parasail.matrix_create("ACGTN", self.score, -1 * self.penalty)
+            score_matrix = self.create_score_matrix()
 
         # Trim both read1 and read2 with all adapters before return
         reads = [read1, read2]
@@ -372,7 +382,7 @@ class DemultiplexInline(Demultiplex):
 
         with DemultiplexWriter(barcode_dict) as fp_dict:
             # score_matrix is initialized here because it cannot be pickled
-            score_matrix = parasail.matrix_create("ACGTN", self.score, -1 * self.penalty)
+            score_matrix = self.create_score_matrix()
 
             self.print_output("Demultiplexing %s and %s..." % (r1, r2), ident)
             with dnaio.open(r1, file2=r2) as fastq_in:
@@ -420,8 +430,17 @@ class DemultiplexBarcode(Demultiplex):
         self.max_error = {adapter: math.floor(len(adapter) * self.error_rate) for adapter in self.adapters}
 
     def match_adapters(self, barcode):
+        # barcode_i7, barcode_i5 = barcode.split("+", 1)
+
         for adapter in self.adapters:
-            if editdistance.eval(barcode, adapter) < self.max_error.get(adapter, 0):
+            mismatch = editdistance.eval(barcode, adapter)
+            # adapter_i7, adapter_i5 = adapter.split("+", 1)
+
+            # mismatch = self.semi_global_distance(barcode_i7, adapter_i7) + \
+            #     self.semi_global_distance(barcode_i5, adapter_i5)
+
+            # mismatch = editdistance.eval(barcode_i7, adapter_i7) + editdistance.eval(barcode_i5, adapter_i5)
+            if mismatch < self.max_error.get(adapter, 0):
                 return barcode
         return None
 
