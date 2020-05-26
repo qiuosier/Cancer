@@ -53,9 +53,10 @@ class Demultiplex:
         barcode_dict = {}
         for output in barcode_outputs:
             arr = str(output).split("=", 1)
-            barcode = arr[0].strip()
+            barcode_list = arr[0].strip().split()
             file_path = arr[1] if len(arr) > 1 else None
-            barcode_dict[barcode] = file_path
+            for barcode in barcode_list:
+                barcode_dict[barcode] = file_path
         return barcode_dict
 
     def __init__(self, adapters, error_rate=None, score=1, penalty=10):
@@ -399,11 +400,10 @@ class DemultiplexInline(Demultiplex):
         counts['total'] = counter
         return counts
 
-    def save_statistics(self, output_dir, name=""):
+    def save_statistics(self, csv_file_path, name=""):
         """Saves the demultiplex statistics into a CSV file
         """
-        output_csv = os.path.join(output_dir, "all_barcode_stats.csv")
-        with open(output_csv, "w") as f:
+        with open(csv_file_path, "w") as f:
             writer = csv.writer(f)
             writer.writerow([
                 "sample", "barcode",
@@ -421,7 +421,8 @@ class DemultiplexInline(Demultiplex):
                 r2 = self.counts.get("%s_2" % adapter, 0)
                 matched = self.counts.get(adapter, 0)
                 writer.writerow([name, adapter, r1 / total, r2 / total, matched / total, total, matched, unmatched])
-        return output_csv
+        self.print_output("Statistics saved to %s" % csv_file_path)
+        return csv_file_path
 
 
 class DemultiplexBarcode(Demultiplex):
