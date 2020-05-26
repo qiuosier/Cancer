@@ -19,12 +19,13 @@ class Program:
         if len(args.r1) != len(args.r2):
             raise ValueError("R1 and R2 must have the same number of files.")
 
-        adapters = [s.strip() for s in args.barcode]
-        if not os.path.exists(args.output):
-            os.makedirs(args.output)
-        demux_inline = DemultiplexInline(adapters, error_rate=args.error_rate, score=args.score, penalty=args.penalty)
-        demux_inline.run_demultiplex(args.r1, args.r2, args.output)
-        demux_inline.save_statistics(args.output, name=args.name)
+        barcode_dict = DemultiplexBarcode.parse_barcode_outputs(args.barcode)
+        demux_inline = DemultiplexInline(
+            list(barcode_dict.keys()), error_rate=args.error_rate, score=args.score, penalty=args.penalty
+        )
+        barcode_dict["NO_MATCH"] = args.unmatched
+        demux_inline.run_demultiplex(args.r1, args.r2, barcode_dict)
+        # demux_inline.save_statistics(args.output, name=args.name)
 
     @staticmethod
     def demux_barcode(args):
@@ -42,8 +43,10 @@ class Program:
         logger.debug("Barcodes: %s" % adapters)
         if not os.path.exists(args.output):
             os.makedirs(args.output)
+        # Use barcode as output file prefix
+        barcode_dict = {adapter: os.path.join(args.output, adapter) for adapter in adapters}
         demux_barcode = DemultiplexBarcode(adapters, error_rate=args.error_rate, score=args.score, penalty=args.penalty)
-        demux_barcode.run_demultiplex(args.r1, args.r2, args.output)
+        demux_barcode.run_demultiplex(args.r1, args.r2, barcode_dict)
 
     @staticmethod
     def compare_fastq(args):
@@ -89,20 +92,23 @@ def main():
     sub_parser = subparsers.add_parser("demux_inline", help="Demultiplex FASTQ files using Inline Barcodes")
     sub_parser.add_argument('--r1', nargs='+', required=True, help="FASTQ R1 files")
     sub_parser.add_argument('--r2', nargs='+', required=True, help="FASTQ R2 files")
-    sub_parser.add_argument('--barcode', nargs='+', required=True, help="Inline Barcodes")
-    sub_parser.add_argument('--output', required=True, help="Output Directory")
-    sub_parser.add_argument('--error_rate', type=float, help="Max Error Allowed")
+    sub_parser.add_argument('--barcode', nargs='+',
+                            help="Barcode and the output file prefix in the format of BARCODE=PREFIX")
+    sub_parser.add_argument('--unmatched', type=str, help="File path for saving the unmatched reads.")
+    # sub_parser.add_argument('--output', required=True, help="Output Directory")
     sub_parser.add_argument('--name', type=str, help="Sample Name for statistics")
-    sub_parser.add_argument('--score', type=int, help="Score for each bp matched")
-    sub_parser.add_argument('--penalty', type=int, help="Penalty for each bp mis-matched")
+    sub_parser.add_argument('--error_rate', type=float, help="Max Error Allowed, defaults to 20%%")
+    sub_parser.add_argument('--score', type=int, help="Score for each bp matched, defaults to 1")
+    sub_parser.add_argument('--penalty', type=int, help="Penalty for each bp mis-matched, defaults to 10")
 
     sub_parser = subparsers.add_parser("demux_barcode", help="Demultiplex FASTQ files using Read Barcodes")
     sub_parser.add_argument('--r1', nargs='+', required=True, help="FASTQ R1 files")
     sub_parser.add_argument('--r2', nargs='+', required=True, help="FASTQ R2 files")
-    sub_parser.add_argument('--barcode', nargs='+', help="Barcodes")
+    sub_parser.add_argument('--barcode', nargs='+',
+                            help="Barcode and the output file prefix in the format of BARCODE=PREFIX")
     sub_parser.add_argument('--output', required=True, help="Output Directory")
-    sub_parser.add_argument('--error_rate', type=float, help="Max Error Allowed")
     sub_parser.add_argument('--name', type=str, help="Sample Name for statistics")
+    sub_parser.add_argument('--error_rate', type=float, help="Max Error Allowed")
     sub_parser.add_argument('--score', type=int, help="Score for each bp matched")
     sub_parser.add_argument('--penalty', type=int, help="Penalty for each bp mis-matched")
 
