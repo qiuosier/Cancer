@@ -159,8 +159,8 @@ class FASTQPair:
             chunk_size:
 
         In this method,
-        the current file (self.r1 and self.r2) is referred as FASTQ1,
-        the file we are comparing with (from r1 and r2 in the input args) is referred as FASTQ2
+        the current file (self.r1 and self.r2) is referred as P1,
+        the file we are comparing with (from r1 and r2 in the input args) is referred as P2
 
         Returns:
 
@@ -172,9 +172,9 @@ class FASTQPair:
 
         # Output filenames
         # Stores reads found in FASTQ1 only
-        fastq1_only = os.path.join(output_dir, "fastq1_only.txt")
+        fastq1_only = os.path.join(output_dir, "P1_only.txt")
         # Stores reads found in FASTQ2 only
-        fastq2_only = os.path.join(output_dir, "fastq2_only.txt")
+        fastq2_only = os.path.join(output_dir, "P2_only.txt")
 
         # Stores reads found in both FASTQs but with difference sequence
         # Reads that are trimmed slightly differently
@@ -193,24 +193,23 @@ class FASTQPair:
         # The number of reads that are not exactly the same but matched
         counter_match = 0
 
-        # The number of reads in FASTQ1
+        # The number of reads in P1
         counter_1 = 0
-        # The number of reads processed, also the number of reads in FASTQ2
+        # The number of reads in P2
         counter_2 = 0
 
-        # The number of reads in FASTQ1 only
+        # The number of reads in P1 only
         counter_1_only = 0
         for fastq1_dict in self.build_index(chunk_size):
             counter_2 = 0
             counter_1 += len(fastq1_dict.keys())
             with dnaio.open(r1, file2=r2) as fastq2, \
-                    open(fastq2_only, 'a') as f2_only, \
                     open(diff_trim, 'a') as f_trim, \
                     open(diff_seq, 'a') as f_diff:
                 for read1, read2 in fastq2:
                     counter_2 += 1
                     if counter_2 % 100000 == 0:
-                        print("%s reads processed." % counter_2)
+                        print("%s reads in P2 processed." % counter_2)
                     read_pair = ReadPair(read1, read2)
                     ident = read_pair.identifier
                     f2_seq1 = read_pair.read1.sequence
@@ -227,8 +226,8 @@ class FASTQPair:
                                 self.__match_trimmed_reads(f2_seq2, f1_seq2):
                             # Both reads matches but FASTQ 1 is trimmed more.
                             f_trim.write(ident + '\n')
-                            f_trim.write("F2R1: " + f2_seq1 + '\n')
-                            f_trim.write("F2R2: " + f2_seq2 + '\n')
+                            f_trim.write("P2R1: " + f2_seq1 + '\n')
+                            f_trim.write("P2R2: " + f2_seq2 + '\n')
                             counter_match += 1
                             continue
 
@@ -236,14 +235,14 @@ class FASTQPair:
                         counter_diff += 1
                         f_diff.write(ident + '\n')
                         if not self.__match_trimmed_reads(f2_seq1, f1_seq1):
-                            f_diff.write("F1R1: " + f1_seq1 + '\n')
-                            f_diff.write("F2R1: " + f2_seq1 + '\n')
+                            f_diff.write("P1R1: " + f1_seq1 + '\n')
+                            f_diff.write("P2R1: " + f2_seq1 + '\n')
                         if not self.__match_trimmed_reads(f2_seq2, f1_seq2):
-                            f_diff.write("F1R2: " + f1_seq2 + '\n')
-                            f_diff.write("F2R2: " + f2_seq2 + '\n')
+                            f_diff.write("P1R2: " + f1_seq2 + '\n')
+                            f_diff.write("P2R2: " + f2_seq2 + '\n')
                     else:
                         pass
-                        # Read not found in FASTQ1
+                        # TODO: Read not found in FASTQ1
                         # TODO: The following does not work if there are multiple chunks
                         # f2_only.write(ident + '\n')
                         # f2_only.write("R1: " + read1.sequence + '\n')
@@ -261,23 +260,19 @@ class FASTQPair:
                     f1_only.write("R2: " + seq2 + '\n')
 
         print("......")
-        print("%d reads in FASTQ1." % counter_1)
-        print("%d reads in FASTQ2." % counter_2)
-        print("%d reads in FASTQ1 only." % counter_1_only)
+        print("%d reads in Pair 1." % counter_1)
+        print("%d reads in Pair 2." % counter_2)
+        print("%d reads in Pair 1 only." % counter_1_only)
         both = counter_same + counter_match + counter_diff
-        print("%d reads in FASTQ2 only." % (counter_2 - both))
+        print("%d reads in Pair 2 only." % (counter_2 - both))
         print("%d reads in both pairs." % both)
         print("%d reads in both pairs are exactly the same." % counter_same)
-        print("%d reads in FASTQ1 are trimmed more at the beginning." % counter_match)
+        print("%d reads in Pair 1 are trimmed more." % counter_match)
         print("%d reads have difference sequence or trimmed differently." % counter_diff)
 
     @staticmethod
     def __match_trimmed_reads(s1, s2):
-        """Compare two reads and see if they matches each other.
-
-        The two sequences are considered as matched if
-            They are exactly the same, OR
-            Read 1 ends with read 2 AND is mo more than 12bp longer than read 2
+        """Compare two read sequences and see if s1 contains s2.
 
         Args:
             s1: Sequence of read 1
@@ -286,4 +281,4 @@ class FASTQPair:
         Returns:
 
         """
-        return (s1 == s2) or (len(s1) - len(s2) <= 12 and s1.endswith(s2))
+        return s2 in s1
