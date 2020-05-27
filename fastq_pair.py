@@ -259,7 +259,10 @@ class FASTQPair:
                     f1_only.write("R1: " + seq1 + '\n')
                     f1_only.write("R2: " + seq2 + '\n')
 
-        print("......")
+        print("=" * 50)
+        print("Pair 1: %s and %s" % (self.r1, self.r2))
+        print("Pair 2: %s and %s" % (r1, r2))
+        print("=" * 50)
         print("%d reads in Pair 1." % counter_1)
         print("%d reads in Pair 2." % counter_2)
         print("%d reads in Pair 1 only." % counter_1_only)
