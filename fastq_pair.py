@@ -4,6 +4,7 @@ import math
 import dnaio
 import gc
 import parasail
+from .fastq import ReadIdentifier
 logger = logging.getLogger(__name__)
 
 match_score = 0
@@ -15,31 +16,29 @@ class ReadPair:
         self.read1 = read1
         self.read2 = read2
 
-        arr1 = self.read1.name.split(" ", 1)
-        arr2 = self.read2.name.split(" ", 1)
+        id_1 = ReadIdentifier(self.read1.name)
+        id_2 = ReadIdentifier(self.read2.name)
 
-        if arr1[0] != arr2[0]:
+        if id_1.identifier != id_2.identifier:
             raise ValueError(
                 "Identifiers of the read pairs does not match each other.\n"
                 "Read1: %s\n"
-                "Read2: %s" % (arr1[0], arr2[0])
+                "Read2: %s" % (id_1.identifier, id_2.identifier)
             )
 
-        self._identifier = arr1[0]
+        self._identifier = id_1.identifier
 
-        if len(arr1) > 1 and len(arr2) > 1:
-            pair1 = arr1[1][0]
-            pair2 = arr2[1][0]
-            if pair1 == pair2:
-                raise ValueError("Both reads are pair %s" % pair1)
+        if id_1.pair_member and id_2.pair_member:
+            if id_1.pair_member == id_2.pair_member:
+                raise ValueError("Both reads are pair %s" % id_1.pair_member)
 
             # Check if read1 and read2 are switched
-            if str(pair1) == '2' and str(pair2) == '1':
+            if str(id_1.pair_member) == '2' and str(id_2.pair_member) == '1':
                 tmp = self.read1
                 self.read1 = self.read2
                 self.read2 = tmp
         else:
-            raise ValueError("Invalid read identifiers.\nRead1: %s\nRead2: %s" % (arr1[0], arr2[0]))
+            raise ValueError("Unable to determine read pair members.\nRead1: %s\nRead2: %s" % (read1.name, read2.name))
 
     @property
     def identifier(self):

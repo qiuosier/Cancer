@@ -2,6 +2,8 @@ import datetime
 import argparse
 import os
 import logging
+import json
+from .fastq import ReadIdentifier
 from .fastq_pair import FASTQPair
 from .demux import DemultiplexInline, DemultiplexBarcode
 from .variants import files
@@ -82,6 +84,11 @@ class Program:
         if out_whitelist:
             whitelist_filter.save_passed(out_whitelist)
 
+    @staticmethod
+    def parse_read_identifier(args):
+        read_id = ReadIdentifier(args.line)
+        print(json.dumps(read_id.info, indent=4))
+
 
 def main():
     parser = argparse.ArgumentParser(description="Command line entry points to Cancer package.")
@@ -121,6 +128,9 @@ def main():
     sub_parser.add_argument('whitelist', help="VCF/CSV/TSV File containing whitelist variants.")
     sub_parser.add_argument('vcf', help="VCF file containing the variants to be filtered.")
     sub_parser.add_argument('--output', required=True, help="Output Directory")
+
+    sub_parser = subparsers.add_parser("parse_read_identifier", help="Parses the identifier of a read from FASTQ file.")
+    sub_parser.add_argument('line', help="Identifier line of a read from FASTQ file.")
 
     args = parser.parse_args()
     # Show help if no subparser matched.

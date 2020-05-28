@@ -10,6 +10,70 @@ from .sequence import Sequence
 logger = logging.getLogger(__name__)
 
 
+class ReadIdentifier:
+    """Parses the identifier line of a read sequence from a FASTQ file.
+
+    See Also: https://en.wikipedia.org/wiki/FASTQ_format
+
+    Tested on the following cases:
+    @HWUSI-EAS100R:6:73:941:1973#0/1
+    @EAS139:136:FC706VJ:2:2104:15343:197393 1:Y:18:ATCACG
+    @EAS139:136:FC706VJ:2:2104:15343:197393 1:N:18:1
+    @SRR001666.1 071112_SLXA-EAS1_s_7:5:1:817:345 length=36
+    @ERR194147.3 HSQ1004:134:C0D8DACXX:3:1101:1318:114841/2
+    @NB552316:26:HWFLNBGXF:1:11101:26601:1229 1:N:0:GCACAACT+CAAGTCGT
+
+    """
+
+    INSTRUMENT_PATTERN = r"^(?P<instrument>[\w-]+):(?:(?P<run_id>[0-9]+):)?(?:(?P<flowcell>\w*[a-zA-Z]\w*):)?"
+    LOCATION_PATTERN = r"(?P<lane>[0-9]+):(?P<tile>[0-9]+):(?P<x>[0-9]+):(?P<y>[0-9]+)"
+    INDEX_PATTERN = r"(?:#(?P<index>[^\/]+))?\/(?P<pair_member>[0-9]+)"
+
+    CONTROL_PATTERN = r"(?P<pair_member>[0-9]+):(?P<is_filtered>[YN]):(?P<control_number>[0-9]+):(?P<index>\S+)"
+
+    SEQ_ID_PATTERN = r"%s%s(?:%s)?" % (INSTRUMENT_PATTERN, LOCATION_PATTERN, INDEX_PATTERN)
+
+    def __init__(self, line):
+        if line.startswith("@"):
+            line = line[1:]
+        self.array = line[1:].split(" ")
+        self.identifier = self.array[0]
+        self.__info = None
+
+    @property
+    def info(self):
+        """A dictionary storing all the information parsed from the identifier line
+        """
+        if self.__info is None:
+            self.__info = dict()
+            # description = []
+            for s in reversed(self.array):
+                # matched = False
+                for pattern in [self.CONTROL_PATTERN, self.SEQ_ID_PATTERN]:
+                    m = re.match(pattern, s)
+                    if m:
+                        # matched = True
+                        self.__info.update({k: v for k, v in m.groupdict().items() if v})
+                        continue
+            #     if not matched and s != self.identifier:
+            #         description.append(s)
+            # self.__info["description"] = " ".join(description)
+        return self.__info
+
+    @property
+    def description(self):
+        """Description includes all characters after the first space.
+        """
+        # return self.info.get("description")
+        return " ".join(self.array[1:]) if len(self.array) > 1 else ""
+
+    @property
+    def pair_member(self):
+        """The member of a pair, 1 or 2 (paired-end or mate-pair reads only)
+        """
+        return self.info.get("pair_member")
+
+
 class FASTQRead:
     """Represents a read in FASTQ file."""
     def __init__(self, lines):
