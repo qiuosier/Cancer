@@ -92,15 +92,14 @@ class DemultiplexWorker:
             self.counts[k] = self.counts.get(k, 0) + v
         return self
 
-    @staticmethod
-    def add_count(counts, key):
+    def add_count(self, key, val=1):
         """Increments the value of a particular key in counts (dictionary)
         This is a static method and it does NOT modify the self.counts
         """
-        c = counts.get(key, 0)
-        c += 1
-        counts[key] = c
-        return counts
+        c = self.counts.get(key, 0)
+        c += val
+        self.counts[key] = c
+        return self.counts
 
     def start(self, in_queue, out_queue):
         print('Started Worker')
@@ -113,6 +112,7 @@ class DemultiplexWorker:
                 result = self.process_read_pair(read_pair)
                 results.append(result)
             out_queue.put(results)
+            self.add_count('total', len(results))
 
     def process_read_pair(self, read_pair):
         raise NotImplementedError
@@ -183,21 +183,21 @@ class DemultiplexInlineWorker(DemultiplexWorker):
         adapter1, adapter2 = self.trim_adapters(read1, read2)
 
         if adapter1:
-            self.add_count(self.counts, "%s_1" % adapter1)
+            self.add_count("%s_1" % adapter1)
         if adapter2:
-            self.add_count(self.counts, "%s_2" % adapter2)
+            self.add_count("%s_2" % adapter2)
 
         # The longer adapter has higher priority
         adapter = adapter1 if len(adapter1) > len(adapter2) else adapter2
         if adapter:
             # Count the number of reads matching the longer adapter
-            self.add_count(self.counts, adapter)
+            self.add_count(adapter)
             # Sequence matched a barcode
-            self.add_count(self.counts, 'matched')
+            self.add_count('matched')
 
         else:
             # Sequence does not match a barcode
-            self.add_count(self.counts, 'unmatched')
+            self.add_count('unmatched')
             adapter = "NO_MATCH"
         return adapter, read1, read2
 
@@ -216,12 +216,21 @@ class DemultiplexProcess:
         self.reader = None
         self.writer = None
 
+        self.adapters = []
+        self.counts = dict()
+
+    def update_counts(self, counts):
+        for k, v in counts.items():
+            self.counts[k] = self.counts.get(k, 0) + v
+        return self.counts
+
     def start(self, fastq_files, barcode_dict, error_rate=None, score=1, penalty=10):
         # for i in range(self.pool_size):
         #     p = Process(target=self.worker_class().start, args=(self.in_queue, self.out_queue))
         #     p.start()
         #     self.pool.append(p)
 
+        self.adapters.extend(barcode_dict.keys())
         jobs = []
         pool = multiprocessing.Pool(self.pool_size)
         for i in range(self.pool_size):
@@ -240,15 +249,14 @@ class DemultiplexProcess:
         #     p.join()
         # Wait for the jobs to be finished and collect the statistics.
         results = [job.get() for job in jobs]
-        counts = dict()
         for r in results:
-            for k, v in r.items():
-                counts[k] = counts.get(k, 0) + v
-        logger.debug(counts)
+            self.update_counts(r)
+
+        logger.debug(self.counts)
         self.reader.join()
         self.out_queue.put(None)
         self.writer.join()
-        return counts
+        return self
 
     @staticmethod
     def start_worker(worker_class, in_queue, out_queue, *args, **kwargs):
@@ -337,6 +345,30 @@ class DemultiplexProcess:
         for key in keys:
             fastq_files.append((r1_dict[key], r2_dict[key]))
         return fastq_files
+
+    def save_statistics(self, csv_file_path, name=""):
+        """Saves the demultiplex statistics into a CSV file
+        """
+        with open(csv_file_path, "w") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "sample", "barcode",
+                "read1_percent", "read2_percent", "total_percent_rna",
+                "total_reads", "rna_reads", "nonrna_reads"
+            ])
+            if "total" not in self.counts:
+                raise KeyError("Total read count is missing.")
+            total = self.counts.get("total")
+            if "unmatched" not in self.counts:
+                raise KeyError("Unmatched read count is missing.")
+            unmatched = self.counts.get("unmatched")
+            for adapter in self.adapters:
+                r1 = self.counts.get("%s_1" % adapter, 0)
+                r2 = self.counts.get("%s_2" % adapter, 0)
+                matched = self.counts.get(adapter, 0)
+                writer.writerow([name, adapter, r1 / total, r2 / total, matched / total, total, matched, unmatched])
+        print("Statistics saved to %s" % csv_file_path)
+        return csv_file_path
 
 
 class Demultiplex:
