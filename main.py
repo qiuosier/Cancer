@@ -5,7 +5,7 @@ import logging
 import json
 from .fastq import ReadIdentifier
 from .fastq_pair import FASTQPair
-from .demux import DemultiplexInline, DemultiplexBarcode
+from .demux import DemultiplexInline, DemultiplexBarcode, DemultiplexProcess, DemultiplexInlineWorker
 from .variants import files
 from Aries.outputs import LoggingConfig
 logger = logging.getLogger(__name__)
@@ -21,12 +21,18 @@ class Program:
         if len(args.r1) != len(args.r2):
             raise ValueError("R1 and R2 must have the same number of files.")
 
-        barcode_dict = DemultiplexBarcode.parse_barcode_outputs(args.barcode)
-        demux_inline = DemultiplexInline(
-            list(barcode_dict.keys()), error_rate=args.error_rate, score=args.score, penalty=args.penalty
-        )
+        barcode_dict = DemultiplexProcess.parse_barcode_outputs(args.barcode)
         barcode_dict["NO_MATCH"] = args.unmatched
-        demux_inline.run_demultiplex(args.r1, args.r2, barcode_dict)
+
+        fastq_files = DemultiplexProcess.pair_fastq_files(args.r1, args.r2)
+        demux_inline = DemultiplexProcess(DemultiplexInlineWorker).start(
+            fastq_files, barcode_dict, error_rate=args.error_rate, score=args.score, penalty=args.penalty
+        )
+
+        # demux_inline = DemultiplexInline(
+        #     list(barcode_dict.keys()), error_rate=args.error_rate, score=args.score, penalty=args.penalty
+        # )
+        # demux_inline.run_demultiplex(args.r1, args.r2, barcode_dict)
         if args.stats:
             demux_inline.save_statistics(args.stats, name=args.name)
 

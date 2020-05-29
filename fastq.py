@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 class ReadIdentifier:
     """Parses the identifier line of a read sequence from a FASTQ file.
 
-    See Also: https://en.wikipedia.org/wiki/FASTQ_format
+    See Also:
+        https://support.illumina.com/bulletins/2016/04/fastq-files-explained.html
+        https://en.wikipedia.org/wiki/FASTQ_format
 
     Tested on the following cases:
     @HWUSI-EAS100R:6:73:941:1973#0/1
