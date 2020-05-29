@@ -108,7 +108,7 @@ class DemultiplexWorker:
             # Keep the starting time for each batch processing
             timer_started = datetime.datetime.now()
             if reads is None:
-                print("Total active time for process %s: %s (%s batches, %s/batch)." % (
+                logger.debug("Total active time for process %s: %s (%s batches, %s/batch)." % (
                     os.getpid(), active_time, batch_count, active_time / batch_count
                 ))
                 return self.counts
@@ -120,7 +120,7 @@ class DemultiplexWorker:
             self.add_count('total', len(results))
             batch_count += 1
             # Add processing time for this batch
-            active_time += datetime.datetime.now() - timer_started
+            active_time += (datetime.datetime.now() - timer_started)
 
     def process_read_pair(self, read_pair):
         raise NotImplementedError
@@ -286,14 +286,14 @@ class DemultiplexProcess:
                     reads.append((read1, read2))
                     size += 1
                     if size > DemultiplexProcess.BATCH_SIZE:
-                        active_time += datetime.datetime.now() - timer_started
+                        active_time += (datetime.datetime.now() - timer_started)
                         batch_count += 1
                         queue.put(reads)
-
+                        timer_started = datetime.datetime.now()
                         size = 0
                         reads = []
 
-                active_time += datetime.datetime.now() - timer_started
+                active_time += (datetime.datetime.now() - timer_started)
                 queue.put(reads)
 
         print('Finished reading files. Active time: %s, Batch size: %s, Batch count: %s' % (
@@ -324,7 +324,7 @@ class DemultiplexProcess:
 
                     if counter % 100000 == 0:
                         print("{:,} reads processed.".format(counter))
-                active_time += datetime.datetime.now() - timer_started
+                active_time += (datetime.datetime.now() - timer_started)
 
     @staticmethod
     def parse_barcode_outputs(barcode_outputs):
