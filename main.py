@@ -33,8 +33,8 @@ class Program:
         #     list(barcode_dict.keys()), error_rate=args.error_rate, score=args.score, penalty=args.penalty
         # )
         # demux_inline.run_demultiplex(args.r1, args.r2, barcode_dict)
-        # if args.stats:
-        #     demux_inline.save_statistics(args.stats, name=args.name)
+        if args.stats:
+            demux_inline.save_statistics(args.stats, name=args.name)
 
     @staticmethod
     def demux_barcode(args):
