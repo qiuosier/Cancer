@@ -8,6 +8,7 @@ import editdistance
 import re
 import logging
 import tempfile
+import datetime
 from multiprocessing import Process, Manager
 from .fastq_pair import ReadPair
 from .fastq import IlluminaFASTQ, BarcodeStatistics
@@ -53,11 +54,9 @@ class DemultiplexWorker:
 
         # Set the default values
         self.error_rate = error_rate if error_rate else self.DEFAULT_ERROR_RATE
-        logger.debug("Error Rate: %s" % self.error_rate)
         self.score = int(score) if str(score).isdigit() else 1
-        logger.debug("Score: %s" % self.score)
         self.penalty = int(penalty) if str(penalty).isdigit() else 10
-        logger.debug("Penalty: %s" % self.penalty)
+        logger.debug("Penalty: %s, Error Rate: %s, Score: %s" % (self.penalty, self.error_rate, self.score))
 
         self.score_matrix = self.create_score_matrix()
 
@@ -102,10 +101,16 @@ class DemultiplexWorker:
         return self.counts
 
     def start(self, in_queue, out_queue):
-        print('Started Worker')
+        active_time = datetime.timedelta()
+        batch_count = 0
         while True:
             reads = in_queue.get()
+            # Keep the starting time for each batch processing
+            timer_started = datetime.datetime.now()
             if reads is None:
+                print("Total active time for process %s: %s (%s batches, %s/batch)." % (
+                    os.getpid(), active_time, batch_count, active_time / batch_count
+                ))
                 return self.counts
             results = []
             for read_pair in reads:
@@ -113,6 +118,9 @@ class DemultiplexWorker:
                 results.append(result)
             out_queue.put(results)
             self.add_count('total', len(results))
+            batch_count += 1
+            # Add processing time for this batch
+            active_time += datetime.datetime.now() - timer_started
 
     def process_read_pair(self, read_pair):
         raise NotImplementedError
@@ -262,33 +270,50 @@ class DemultiplexProcess:
     def start_worker(worker_class, in_queue, out_queue, *args, **kwargs):
         return worker_class(*args, **kwargs).start(in_queue, out_queue)
 
+    BATCH_SIZE = 5000
+
     @staticmethod
     def read_data(fastq_files, queue, pool_size):
-        print('Started Reader')
-        batch_size = 0
+        active_time = datetime.timedelta()
+        batch_count = 0
+        size = 0
+
         for fastq_pair in fastq_files:
             with dnaio.open(fastq_pair[0], file2=fastq_pair[1]) as fastq_in:
+                timer_started = datetime.datetime.now()
                 reads = []
                 for read1, read2 in fastq_in:
                     reads.append((read1, read2))
-                    batch_size += 1
-                    if batch_size > 5000:
+                    size += 1
+                    if size > DemultiplexProcess.BATCH_SIZE:
+                        active_time += datetime.datetime.now() - timer_started
+                        batch_count += 1
                         queue.put(reads)
-                        batch_size = 0
+
+                        size = 0
                         reads = []
+
+                active_time += datetime.datetime.now() - timer_started
                 queue.put(reads)
-        print('Finished Reading the file.')
+
+        print('Finished reading files. Active time: %s, Batch size: %s, Batch count: %s' % (
+            active_time, DemultiplexProcess.BATCH_SIZE, batch_count
+        ))
         for i in range(pool_size):
             queue.put(None)
 
     @staticmethod
     def write_data(queue, barcode_dict):
-        print('Started Writer')
+        active_time = datetime.timedelta()
         counter = 0
         with DemultiplexWriter(barcode_dict) as fp_dict:
             while True:
                 results = queue.get()
+                timer_started = datetime.datetime.now()
                 if results is None:
+                    print('Finished writing files. Active time: %s' % (
+                        active_time
+                    ))
                     return
                 for barcode, read1, read2 in results:
                     counter += 1
@@ -298,7 +323,8 @@ class DemultiplexProcess:
                     fp.write(read1, read2)
 
                     if counter % 100000 == 0:
-                        print("%s reads processed." % counter)
+                        print("{:,} reads processed.".format(counter))
+                active_time += datetime.datetime.now() - timer_started
 
     @staticmethod
     def parse_barcode_outputs(barcode_outputs):
