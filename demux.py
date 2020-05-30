@@ -9,6 +9,7 @@ import re
 import logging
 import tempfile
 import datetime
+import time
 from multiprocessing import Process, Manager
 from .fastq_pair import ReadPair
 from .fastq import IlluminaFASTQ, BarcodeStatistics
@@ -218,12 +219,7 @@ class DemultiplexProcess:
         self.pool_size = max(os.cpu_count() - 2, 1)
         logger.debug("Pool Size: %s" % self.pool_size)
         self.manager = Manager()
-        self.in_queue = self.manager.Queue(self.pool_size * 10)
-        self.out_queue = self.manager.Queue(self.pool_size * 100)
         self.pool = []
-
-        self.reader = None
-        self.writer = None
 
         self.adapters = []
         self.counts = dict()
@@ -234,8 +230,11 @@ class DemultiplexProcess:
         return self.counts
 
     def start(self, fastq_files, barcode_dict, error_rate=None, score=1, penalty=10):
+        reader_queue = self.manager.Queue(self.pool_size * 100)
+        writer_queue = self.manager.Queue(self.pool_size * 100)
+
         # for i in range(self.pool_size):
-        #     p = Process(target=self.worker_class().start, args=(self.in_queue, self.out_queue))
+        #     p = Process(target=self.worker_class().start, args=(self.reader_queue, self.writer_queue))
         #     p.start()
         #     self.pool.append(p)
 
@@ -245,14 +244,32 @@ class DemultiplexProcess:
         for i in range(self.pool_size):
             job = pool.apply_async(
                 self.start_worker,
-                (self.worker_class, self.in_queue, self.out_queue, list(barcode_dict.keys()), error_rate, score, penalty)
+                (self.worker_class, reader_queue, writer_queue, list(barcode_dict.keys()), error_rate, score, penalty)
             )
             jobs.append(job)
 
-        self.reader = Process(target=DemultiplexProcess.read_data, args=(fastq_files, self.in_queue, self.pool_size))
-        self.reader.start()
-        self.writer = Process(target=DemultiplexProcess.write_data, args=(self.out_queue, barcode_dict))
-        self.writer.start()
+        readers = []
+        for fastq_pair in fastq_files:
+            reader = Process(target=DemultiplexProcess.read_data, args=([fastq_pair], reader_queue, self.pool_size))
+            reader.start()
+            readers.append(reader)
+
+        writer = Process(target=DemultiplexProcess.write_data, args=(writer_queue, barcode_dict))
+        writer.start()
+
+        # Wait for the jobs to finish and keep track of the queue size
+        reader_q_size = []
+        writer_q_size = []
+        while True:
+            reader_q_size.append(reader_queue.qsize())
+            writer_q_size.append(writer_queue.qsize())
+            ready = True
+            for job in jobs:
+                if not job.ready():
+                    ready = False
+            if ready:
+                break
+            time.sleep(5)
 
         # for p in self.pool:
         #     p.join()
@@ -261,11 +278,23 @@ class DemultiplexProcess:
         for r in results:
             self.update_counts(r)
 
+        logger.debug("Reader's queue max size: %s" % max(reader_q_size))
+        self.print_queue_size(reader_q_size)
+        logger.debug("Writer's queue max size: %s" % max(writer_q_size))
+        self.print_queue_size(writer_q_size)
+
         logger.debug(self.counts)
-        self.reader.join()
-        self.out_queue.put(None)
-        self.writer.join()
+        for reader in readers:
+            reader.join()
+
+        writer_queue.put(None)
+        writer.join()
         return self
+
+    @staticmethod
+    def print_queue_size(q_size_array):
+        for s in q_size_array:
+            print("*" * s + str(s))
 
     @staticmethod
     def start_worker(worker_class, in_queue, out_queue, *args, **kwargs):
@@ -331,7 +360,6 @@ class DemultiplexProcess:
 
                     if counter % 100000 == 0:
                         print("{:,} reads processed.".format(counter))
-
 
     @staticmethod
     def parse_barcode_outputs(barcode_outputs):
