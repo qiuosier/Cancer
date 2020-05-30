@@ -271,7 +271,7 @@ class DemultiplexProcess:
     def __init__(self, worker_class):
         self.worker_class = worker_class
 
-        self.pool_size = max(os.cpu_count() - 2, 1)
+        self.pool_size = max(os.cpu_count(), 1)
         logger.debug("Pool Size: %s" % self.pool_size)
         self.manager = Manager()
         self.pool = []
