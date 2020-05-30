@@ -116,11 +116,12 @@ class DemultiplexWorker:
             for read_pair in reads:
                 result = self.process_read_pair(read_pair)
                 results.append(result)
-            out_queue.put(results)
+
             self.add_count('total', len(results))
             batch_count += 1
             # Add processing time for this batch
             active_time += (datetime.datetime.now() - timer_started)
+            out_queue.put(results)
 
     def process_read_pair(self, read_pair):
         raise NotImplementedError
@@ -214,11 +215,11 @@ class DemultiplexProcess:
     def __init__(self, worker_class):
         self.worker_class = worker_class
 
-        self.pool_size = max(os.cpu_count() - 1, 1)
+        self.pool_size = max(os.cpu_count() - 2, 1)
         logger.debug("Pool Size: %s" % self.pool_size)
         self.manager = Manager()
         self.in_queue = self.manager.Queue(self.pool_size * 10)
-        self.out_queue = self.manager.Queue(self.pool_size * 10)
+        self.out_queue = self.manager.Queue(self.pool_size * 100)
         self.pool = []
 
         self.reader = None
@@ -274,45 +275,51 @@ class DemultiplexProcess:
 
     @staticmethod
     def read_data(fastq_files, queue, pool_size):
-        active_time = datetime.timedelta()
+        enqueue_time = datetime.timedelta()
         batch_count = 0
-        size = 0
 
+        process_started = datetime.datetime.now()
         for fastq_pair in fastq_files:
             with dnaio.open(fastq_pair[0], file2=fastq_pair[1]) as fastq_in:
-                timer_started = datetime.datetime.now()
+                # timer_started = datetime.datetime.now()
+                size = 0
                 reads = []
                 for read1, read2 in fastq_in:
                     reads.append((read1, read2))
                     size += 1
                     if size > DemultiplexProcess.BATCH_SIZE:
-                        active_time += (datetime.datetime.now() - timer_started)
                         batch_count += 1
-                        queue.put(reads)
+
                         timer_started = datetime.datetime.now()
+                        queue.put(reads)
+                        enqueue_time += (datetime.datetime.now() - timer_started)
+
                         size = 0
                         reads = []
 
-                active_time += (datetime.datetime.now() - timer_started)
+                timer_started = datetime.datetime.now()
                 queue.put(reads)
+                enqueue_time += (datetime.datetime.now() - timer_started)
 
-        print('Finished reading files. Active time: %s, Batch size: %s, Batch count: %s' % (
-            active_time, DemultiplexProcess.BATCH_SIZE, batch_count
+        print('Finished reading files. Total time: %s, Enqueue time: %s, Batch size: %s, Batch count: %s' % (
+            datetime.datetime.now() - process_started, enqueue_time, DemultiplexProcess.BATCH_SIZE, batch_count
         ))
         for i in range(pool_size):
             queue.put(None)
 
     @staticmethod
     def write_data(queue, barcode_dict):
-        active_time = datetime.timedelta()
+        process_started = datetime.datetime.now()
+        dequeue_time = datetime.timedelta()
         counter = 0
         with DemultiplexWriter(barcode_dict) as fp_dict:
             while True:
-                results = queue.get()
                 timer_started = datetime.datetime.now()
+                results = queue.get()
+                dequeue_time += (datetime.datetime.now() - timer_started)
                 if results is None:
-                    print('Finished writing files. Active time: %s' % (
-                        active_time
+                    print('Finished writing files. Total time: %s, Dequeue time: %s' % (
+                        datetime.datetime.now() - process_started, dequeue_time
                     ))
                     return
                 for barcode, read1, read2 in results:
@@ -324,7 +331,7 @@ class DemultiplexProcess:
 
                     if counter % 100000 == 0:
                         print("{:,} reads processed.".format(counter))
-                active_time += (datetime.datetime.now() - timer_started)
+
 
     @staticmethod
     def parse_barcode_outputs(barcode_outputs):
