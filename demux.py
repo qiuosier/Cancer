@@ -285,7 +285,7 @@ class DemultiplexProcess:
         #     self.pool.append(p)
 
         self.adapters.extend(barcode_dict.keys())
-        jobs = []
+
         pool = multiprocessing.Pool(self.pool_size)
         jobs = []
         for i in range(self.pool_size):
@@ -454,15 +454,23 @@ class DemultiplexProcess:
             fastq_files.append((r1_dict[key], r2_dict[key]))
         return fastq_files
 
-    def save_statistics(self, csv_file_path, name=""):
+    def save_statistics(self, csv_file_path, sample_name=None, header=None):
         """Saves the demultiplex statistics into a CSV file
+
         """
+
+        if not header:
+            header = ""
+
+        if not sample_name:
+            sample_name = ""
+
         with open(csv_file_path, "w") as f:
             writer = csv.writer(f)
             writer.writerow([
                 "sample", "barcode",
-                "read1_percent", "read2_percent", "total_percent_rna",
-                "total_reads", "rna_reads", "nonrna_reads"
+                "read1_percent", "read2_percent", "total_percent_%s" % header,
+                "total_reads", "%s_reads" % header, "non%s_reads" % header
             ])
             if "total" not in self.counts:
                 raise KeyError("Total read count is missing.")
@@ -474,7 +482,9 @@ class DemultiplexProcess:
                 r1 = self.counts.get("%s_1" % adapter, 0)
                 r2 = self.counts.get("%s_2" % adapter, 0)
                 matched = self.counts.get(adapter, 0)
-                writer.writerow([name, adapter, r1 / total, r2 / total, matched / total, total, matched, unmatched])
+                writer.writerow([
+                    sample_name, adapter, r1 / total, r2 / total, matched / total, total, matched, unmatched
+                ])
         print("Statistics saved to %s" % csv_file_path)
         return csv_file_path
 
