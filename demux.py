@@ -17,32 +17,78 @@ logger = logging.getLogger(__name__)
 
 
 class DemultiplexWriter(dict):
+    """A dictionary subclass holding barcode adapters and
+    the corresponding file-like objects for writing fastq.gz files.
 
+    In the dictionary:
+    Each key is a barcode.
+    The actual filenames are specified by the paired_end_filenames() method.
+    Each value is a file-like object returned by opening a pair of fastq.gz files.
+
+    Attributes:
+        barcode_dict: A dictionary mapping barcode to filename prefix.
+        prefix_dict: A dictionary mapping filename prefix to file-like object.
+            prefix_dict can be used to determine the files with certain prefix are opened.
+
+    This class supports context manager, for example:
+        with DemultiplexWriter(barcode_dict) as writer:
+            ...PROCESSING CODE HERE...
+
+    """
     @staticmethod
-    def pair_end_filenames(prefix):
+    def paired_end_filenames(prefix):
+        """Maps a prefix to a 2-tuple of filenames (R1, R2)
+
+        Args:
+            prefix (str): Prefix for the filenames, including the full path.
+
+        Returns: A 2-tuple of strings as the filenames for R1 and R2 FASTQ files.
+
+        """
         return prefix + ".R1.fastq.gz", prefix + ".R2.fastq.gz"
 
     def __init__(self, barcode_dict):
+        """Initializes the writer with a dictionary mapping barcode to filename prefix.
+
+        Args:
+            barcode_dict: A dictionary mapping barcode to filename prefix
+                Each key is a barcode.
+                Each value is a prefix for output filename, including the full path.
+                The output file will contain the reads corresponds to the barcode.
+                If multiple barcodes are mapping to the same prefix,
+                    the reads with those barcodes will be written into the same output file pair.
+
+        """
         self.barcode_dict = barcode_dict
-        self.path_dict = {}
+        self.prefix_dict = {}
         super().__init__()
 
-    def __enter__(self):
-        for barcode, file_path in self.barcode_dict.items():
-            if not file_path:
+    def open(self):
+        """Opens the files for writing
+        """
+        for barcode, prefix in self.barcode_dict.items():
+            if not prefix:
                 self[barcode] = None
-            if file_path in self.path_dict.keys():
-                self[barcode] = self.path_dict[file_path]
+            if prefix in self.prefix_dict.keys():
+                self[barcode] = self.prefix_dict[prefix]
             else:
-                r1_out, r2_out = DemultiplexWriter.pair_end_filenames(file_path)
+                r1_out, r2_out = DemultiplexWriter.paired_end_filenames(prefix)
                 fp = dnaio.open(r1_out, file2=r2_out, mode='w')
-                self.path_dict[file_path] = fp
+                self.prefix_dict[prefix] = fp
                 self[barcode] = fp
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def close(self):
+        """Closes the files
+        """
         for fp in self.values():
             fp.close()
+
+    def __enter__(self):
+        return self.open()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        return self.close()
 
 
 class DemultiplexWorker:
@@ -241,6 +287,7 @@ class DemultiplexProcess:
         self.adapters.extend(barcode_dict.keys())
         jobs = []
         pool = multiprocessing.Pool(self.pool_size)
+        jobs = []
         for i in range(self.pool_size):
             job = pool.apply_async(
                 self.start_worker,
@@ -564,8 +611,8 @@ class Demultiplex:
         """
         logger.debug("Concatenating files: %s" % prefix_dict)
         for prefix, prefix_list in prefix_dict.items():
-            r1, r2 = DemultiplexWriter.pair_end_filenames(prefix)
-            pair_list = [DemultiplexWriter.pair_end_filenames(p) for p in prefix_list]
+            r1, r2 = DemultiplexWriter.paired_end_filenames(prefix)
+            pair_list = [DemultiplexWriter.paired_end_filenames(p) for p in prefix_list]
 
             cmd = "cat %s > %s" % (" ".join(p[0] for p in pair_list), r1)
             os.system(cmd)
@@ -794,7 +841,7 @@ class DemultiplexInline(Demultiplex):
             self.print_output("%s reads processed." % counter, ident)
             self.print_output("%s reads matched." % counts.get("matched", 0), ident)
             self.print_output("%s reads unmatched." % counts.get("unmatched", 0), ident)
-            self.print_output("Output Prefixes:\n%s" % "\n".join(fp_dict.path_dict.keys()), ident)
+            self.print_output("Output Prefixes:\n%s" % "\n".join(fp_dict.prefix_dict.keys()), ident)
 
         counts['total'] = counter
         return counts
