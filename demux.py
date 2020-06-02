@@ -110,7 +110,9 @@ class DemultiplexWorker:
         self.error_rate = error_rate if error_rate else self.DEFAULT_ERROR_RATE
         self.score = int(score) if str(score).isdigit() else 1
         self.penalty = int(penalty) if str(penalty).isdigit() else 10
-        logger.debug("Penalty: %s, Error Rate: %s, Score: %s" % (self.penalty, self.error_rate, self.score))
+        logger.debug("Process %s, Penalty: %s, Error Rate: %s, Score: %s" % (
+            os.getpid(), self.penalty, self.error_rate, self.score
+        ))
 
         self.score_matrix = self.create_score_matrix()
 
@@ -163,7 +165,7 @@ class DemultiplexWorker:
                 # Keep the starting time for each batch processing
                 timer_started = datetime.datetime.now()
                 if reads is None:
-                    logger.debug("Total active time for process %s: %s (%s batches, %s/batch)." % (
+                    logger.debug("Process %s, Active time: %s (%s batches, %s/batch)." % (
                         os.getpid(), active_time, batch_count, active_time / batch_count
                     ))
                     return self.counts
@@ -304,7 +306,7 @@ class DemultiplexProcess:
         logger.debug("Reader's queue max size: %s" % max(reader_q_size))
         self.print_queue_size(reader_q_size)
 
-    def wait_for_workers(self, jobs):
+    def wait_for_jobs(self, jobs):
         # Wait for the jobs to finish and keep track of the queue size
         reader_q_size = []
         # writer_q_size = []
@@ -322,6 +324,31 @@ class DemultiplexProcess:
                 break
             time.sleep(5)
         return reader_q_size
+
+    def collect_results(self, jobs):
+        # Collect the statistics.
+        results = [job.get() for job in jobs]
+        for r in results:
+            self.update_counts(r)
+        logger.debug(self.counts)
+        return self.counts
+
+    @staticmethod
+    def prepare_concatenation(barcode_dict, output_list):
+        # prefix_dict is a dict storing the final output prefix as keys, and
+        # each value is a list of file prefixes (paths) to be concatenated.
+        prefix_dict = {}
+        for barcode, file_prefix in barcode_dict.items():
+            # The following code will merge the barcodes pointing to the same file path
+            path_list = prefix_dict.get(file_prefix, [])
+            path_list.extend([
+                output_dict.get(barcode)
+                for output_dict in output_list
+                if output_dict.get(barcode)
+            ])
+            prefix_dict[file_prefix] = path_list
+        prefix_dict = {k: list(set(v)) for k, v in prefix_dict.items()}
+        return prefix_dict
 
     def start(self, fastq_files, barcode_dict, error_rate=None, score=1, penalty=10):
         self.adapters.extend(barcode_dict.keys())
@@ -344,41 +371,16 @@ class DemultiplexProcess:
 
             readers = self.start_readers(fastq_files)
 
-            # writer = Process(target=DemultiplexProcess.write_data, args=(writer_queue, barcode_dict))
-            # writer.start()
-
             # Wait for the jobs to finish and keep track of the queue size
-            reader_q_size = self.wait_for_workers(jobs)
+            reader_q_size = self.wait_for_jobs(jobs)
 
             # Collect the statistics.
-            results = [job.get() for job in jobs]
-            for r in results:
-                self.update_counts(r)
-
+            self.collect_results(jobs)
             self.finalize_readers(readers, reader_q_size)
-            # logger.debug("Writer's queue max size: %s" % max(writer_q_size))
-            # self.print_queue_size(writer_q_size)
 
-            logger.debug(self.counts)
-
-            # prefix_dict is a dict storing the final output prefix as keys, and
-            # each value is a list of file prefixes (paths) to be concatenated.
-            prefix_dict = {}
-            for barcode, file_prefix in barcode_dict.items():
-                # The following code will merge the barcodes pointing to the same file path
-                path_list = prefix_dict.get(file_prefix, [])
-                path_list.extend([
-                    output_dict.get(barcode)
-                    for output_dict in output_list
-                    if output_dict.get(barcode)
-                ])
-                prefix_dict[file_prefix] = path_list
-            prefix_dict = {k: list(set(v)) for k, v in prefix_dict.items()}
-
+            prefix_dict = self.prepare_concatenation(barcode_dict, output_list)
             self.concatenate_fastq(prefix_dict)
-            logger.debug(prefix_dict.keys())
-        # writer_queue.put(None)
-        # writer.join()
+
         return self
 
     @staticmethod
@@ -392,8 +394,10 @@ class DemultiplexProcess:
 
             cmd = "cat %s > %s" % (" ".join(p[0] for p in pair_list), r1)
             os.system(cmd)
+            logger.debug(r1)
             cmd = "cat %s > %s" % (" ".join(p[1] for p in pair_list), r2)
             os.system(cmd)
+            logger.debug(r2)
 
     @staticmethod
     def print_queue_size(q_size_array):
