@@ -20,6 +20,8 @@ class DemultiplexWriter(dict):
     """A dictionary subclass holding barcode adapters and
     the corresponding file-like objects for writing fastq.gz files.
 
+    This class is designed to write read pairs into FASTQ files based on the barcode.
+
     In the dictionary:
     Each key is a barcode.
     The actual filenames are specified by the paired_end_filenames() method.
@@ -33,11 +35,17 @@ class DemultiplexWriter(dict):
     This class supports context manager, for example:
         with DemultiplexWriter(barcode_dict) as writer:
             ...PROCESSING CODE HERE...
+            writer.write(BARCODE, READ1, READ2)
+            ...
 
     """
+
+    BARCODE_NOT_MATCHED = "NO_MATCH"
+
     @staticmethod
     def paired_end_filenames(prefix):
         """Maps a prefix to a 2-tuple of filenames (R1, R2)
+        This static method defines the output filenames.
 
         Args:
             prefix (str): Prefix for the filenames, including the full path.
@@ -98,10 +106,21 @@ class DemultiplexWriter(dict):
 
 
 class DemultiplexWorker:
-
+    """Represents a worker process for demultiplexing FASTQ reads
+    """
     DEFAULT_ERROR_RATE = 0.1
 
     def __init__(self, barcode_dict, error_rate=None, score=1, penalty=10):
+        """Initialize a demultiplex worker process.
+
+        Args:
+            barcode_dict: A dictionary mapping barcode to filename prefix.
+                The barcode_dict is used to initialize DemultiplexWriter.
+            error_rate: Max error rate allowed for a read to be considered as matching a barcode.
+                error_rate is used to determine the max distance allowed between the barcode and the read.
+            score: Score for one base pair match.
+            penalty: Penalty for one unit distance.
+        """
         self.barcode_dict = barcode_dict
         self.adapters = list(barcode_dict.keys())
         self.min_match_length = round(min([len(adapter) / 2 for adapter in self.adapters]))
@@ -123,6 +142,8 @@ class DemultiplexWorker:
         self.counts = dict(matched=0, unmatched=0, total=0)
 
     def create_score_matrix(self):
+        """Creates a parasail score matrix for alignment
+        """
         return parasail.matrix_create("ACGTN", self.score, -1 * self.penalty)
 
     def semi_global_distance(self, s1, s2):
@@ -136,7 +157,7 @@ class DemultiplexWorker:
         """Updates the demultiplex statistics.
 
         Args:
-            counts: A dictionary storing the statistics.
+            counts: A dictionary storing the statistics. All values should be numeric.
 
         This method merges counts from the input argument with self.counts
         Values of the existing keys are added together.
@@ -157,6 +178,17 @@ class DemultiplexWorker:
         return self.counts
 
     def start(self, in_queue, out_queue):
+        """Starts the demultiplexing to process reads from in_queue.
+        The number of reads processed are put into the out_queue for counting purpose.
+
+        Args:
+            in_queue: A queue holding list of reads to be processed.
+                Each item in the in_queue is a list reads so that the frequency of access the queue are reduced.
+            out_queue: A queue holding integers for counting purpose.
+
+        Returns:
+
+        """
         active_time = datetime.timedelta()
         batch_count = 0
         with DemultiplexWriter(self.barcode_dict) as writer:
@@ -182,11 +214,36 @@ class DemultiplexWorker:
                 out_queue.put(len(reads))
 
     def process_read_pair(self, read_pair):
+        """Process the read pair
+
+        Sub-class should implement this method to return a 3-tuple, i.e.
+            (BARCODE, READ1, READ2)
+
+        """
         raise NotImplementedError
 
 
 class DemultiplexInlineWorker(DemultiplexWorker):
+    """Demultiplex FASTQ reads by Inline barcode at the beginning of the reads
 
+    self.counts will be a dictionary storing the demultiplex statistics, which includes the following keys:
+        matched: the number of read pairs matched at least ONE of the adapters
+        unmatched: the number of read pairs matching NONE of the adapters
+        total: total number of read pairs processed
+        Three keys for each adapter, i.e. BARCODE, BARCODE_1 and BARCODE_2
+        BARCODE stores the number of reads matching the corresponding adapter.
+        BARCODE_1 stores the number of forward reads (pair 1) matching the corresponding adapter.
+        BARCODE_2 stores the number of reverse-compliment reads (pair 2) matching the corresponding adapter.
+
+        For the values corresponding to BARCODE keys,
+            each READ PAIR will only be counted once even if it is matching multiple adapters.
+            The longer barcode will be used if the two reads in a pair is matching different adapters.
+
+        For the values corresponding to BARCODE_1 and BARCODE_2 keys,
+            each READ will be counted once.
+            The first barcode in self.adapters will be used if the read is matching multiple adapters.
+
+    """
     DEFAULT_ERROR_RATE = 0.2
 
     def trim_adapters(self, read1, read2):
@@ -646,16 +703,6 @@ class Demultiplex:
         # Whether to use this in the sub-class is optional.
         self.counts = {}
 
-    def create_score_matrix(self):
-        return parasail.matrix_create("ACGTN", self.score, -1 * self.penalty)
-
-    def semi_global_distance(self, s1, s2):
-        score_matrix = self.create_score_matrix()
-        result = parasail.sg_de_stats(
-            s1, s2, self.penalty, self.penalty, score_matrix
-        )
-        return (self.score * result.matches - result.score) / self.penalty
-
     def demultiplex_fastq_pair(self, r1, r2, barcode_dict, ident=None):
         raise NotImplementedError()
 
@@ -840,22 +887,6 @@ class DemultiplexBarcode(Demultiplex):
             if mismatch < self.max_error.get(adapter, 0):
                 return barcode
         return None
-
-    @staticmethod
-    def determine_adapters(r1):
-        barcode_dict = dict()
-        counter = 0
-        with dnaio.open(r1) as fastq_in:
-            for read1 in fastq_in:
-                barcode = read1.name.strip().split(":")[-1]
-                if re.match(IlluminaFASTQ.dual_index_pattern, barcode):
-                    barcode = IlluminaFASTQ.convert_barcode(barcode)
-                DemultiplexBarcode.add_count(barcode_dict, barcode)
-                counter += 1
-                if counter > 3000:
-                    break
-        barcode_list = BarcodeStatistics(barcode_dict).major_barcodes()
-        return barcode_list
 
     def demultiplex_fastq_pair(self, r1, r2, barcode_dict, ident=None):
         counts = dict()
