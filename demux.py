@@ -265,11 +265,47 @@ class DemultiplexInlineWorker(DemultiplexWorker):
         else:
             # Sequence does not match a barcode
             self.add_count('unmatched')
-            adapter = "NO_MATCH"
+            adapter = DemultiplexWriter.BARCODE_NOT_MATCHED
         return adapter, read1, read2
 
 
+class DemultiplexDualIndexWorker(DemultiplexWorker):
+    def __init__(self, barcode_dict, error_rate=None, score=1, penalty=10):
+        super().__init__(barcode_dict, error_rate, score, penalty)
+        self.max_error = {adapter: math.floor(len(adapter) * self.error_rate) for adapter in self.adapters}
+
+    def match_adapters(self, barcode):
+        # barcode_i7, barcode_i5 = barcode.split("+", 1)
+
+        for adapter in self.adapters:
+            mismatch = editdistance.eval(barcode, adapter)
+            # adapter_i7, adapter_i5 = adapter.split("+", 1)
+
+            # mismatch = self.semi_global_distance(barcode_i7, adapter_i7) + \
+            #     self.semi_global_distance(barcode_i5, adapter_i5)
+
+            # mismatch = editdistance.eval(barcode_i7, adapter_i7) + editdistance.eval(barcode_i5, adapter_i5)
+            if mismatch < self.max_error.get(adapter, 0):
+                return barcode
+        return None
+
+    def process_read_pair(self, read_pair):
+        read1, read2 = read_pair
+        barcode = ReadPair(read1, read2).barcode
+        if re.match(IlluminaFASTQ.dual_index_pattern, barcode):
+            barcode = IlluminaFASTQ.convert_barcode(barcode)
+        barcode = self.match_adapters(barcode)
+        if not barcode:
+            # TODO: Write unmatched reads.
+            self.add_count("unmatched")
+            return DemultiplexWriter.BARCODE_NOT_MATCHED, read1, read2
+        self.add_count(barcode)
+        return barcode, read1, read2
+
+
 class DemultiplexProcess:
+    """Represents a demultiplex process managing multiple readers and workers.
+    """
     def __init__(self, worker_class):
         self.worker_class = worker_class
 
