@@ -489,6 +489,14 @@ class DemultiplexProcess:
         return barcode_dict
 
     @staticmethod
+    def get_identifier(fastq_file):
+        """Gets the identifier of the first read in a FASTQ file
+        """
+        with dnaio.open(fastq_file) as f:
+            for read in f:
+                return read.name.split(" ", 1)[0]
+
+    @staticmethod
     def pair_fastq_files(r1_list, r2_list):
         """Pairs the FASTQ files from two lists by the identifier of the first read
         """
@@ -500,8 +508,8 @@ class DemultiplexProcess:
         if not isinstance(r2_list, list):
             r2_list = [r2_list]
 
-        r1_dict = {DemultiplexInline.get_identifier(f): f for f in r1_list}
-        r2_dict = {DemultiplexInline.get_identifier(f): f for f in r2_list}
+        r1_dict = {DemultiplexProcess.get_identifier(f): f for f in r1_list}
+        r2_dict = {DemultiplexProcess.get_identifier(f): f for f in r2_list}
 
         if r1_dict.keys() != r2_dict.keys():
             raise ValueError("Unable to pair R1 and R2.\nR1: %s\nR2: %s" % (r1_dict.keys(), r2_dict.keys()))
@@ -513,6 +521,11 @@ class DemultiplexProcess:
         for key in keys:
             fastq_files.append((r1_dict[key], r2_dict[key]))
         return fastq_files
+
+
+class DemultiplexInline(DemultiplexProcess):
+    def __init__(self):
+        super().__init__(DemultiplexInlineWorker)
 
     def save_statistics(self, csv_file_path, sample_name=None, header=None):
         """Saves the demultiplex statistics into a CSV file
@@ -661,8 +674,8 @@ class Demultiplex:
         if not isinstance(r2_list, list):
             r2_list = [r2_list]
 
-        r1_dict = {DemultiplexInline.get_identifier(f): f for f in r1_list}
-        r2_dict = {DemultiplexInline.get_identifier(f): f for f in r2_list}
+        r1_dict = {Demultiplex.get_identifier(f): f for f in r1_list}
+        r2_dict = {Demultiplex.get_identifier(f): f for f in r2_list}
 
         if r1_dict.keys() != r2_dict.keys():
             raise ValueError("Unable to pair R1 and R2.\nR1: %s\nR2: %s" % (r1_dict.keys(), r2_dict.keys()))
