@@ -5,7 +5,7 @@ import logging
 import json
 from .fastq import ReadIdentifier
 from .fastq_pair import FASTQPair
-from .demux import DemultiplexBarcode, DemultiplexInline, DemultiplexInlineWorker, DemultiplexWriter
+from .demux import DemultiplexInline, DemultiplexDualIndex, DemultiplexWriter
 from .variants import files
 from Aries.outputs import LoggingConfig
 logger = logging.getLogger(__name__)
@@ -42,6 +42,7 @@ class Program:
     def demux_barcode(args):
         if len(args.r1) != len(args.r2):
             raise ValueError("R1 and R2 must have the same number of files.")
+        demux_dual = DemultiplexDualIndex()
         if args.barcode:
             adapters = [s.strip() for s in args.barcode]
         else:
@@ -50,14 +51,14 @@ class Program:
             else:
                 r1 = args.r1
             logger.debug("Determining the barcodes in %s..." % r1)
-            adapters = DemultiplexBarcode.determine_adapters(r1)
+            adapters = demux_dual.determine_adapters(r1)
         logger.debug("Barcodes: %s" % adapters)
         if not os.path.exists(args.output):
             os.makedirs(args.output)
         # Use barcode as output file prefix
         barcode_dict = {adapter: os.path.join(args.output, adapter) for adapter in adapters}
-        demux_barcode = DemultiplexBarcode(adapters, error_rate=args.error_rate, score=args.score, penalty=args.penalty)
-        demux_barcode.run_demultiplex(args.r1, args.r2, barcode_dict)
+        fastq_files = demux_dual.pair_fastq_files(args.r1, args.r2)
+        demux_dual.start(fastq_files, barcode_dict, error_rate=args.error_rate, score=args.score, penalty=args.penalty)
 
     @staticmethod
     def compare_fastq(args):

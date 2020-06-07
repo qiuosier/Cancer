@@ -598,31 +598,35 @@ class DemultiplexInline(DemultiplexProcess):
         return csv_file_path
 
 
+class DemultiplexDualIndex(DemultiplexProcess):
+    def __init__(self):
+        super().__init__(DemultiplexDualIndexWorker)
+
+    @staticmethod
+    def determine_adapters(r1):
+        barcode_counts = dict()
+        counter = 0
+        with dnaio.open(r1) as fastq_in:
+            for read1 in fastq_in:
+                barcode = read1.name.strip().split(":")[-1]
+                if re.match(IlluminaFASTQ.dual_index_pattern, barcode):
+                    barcode = IlluminaFASTQ.convert_barcode(barcode)
+                c = barcode_counts.get(barcode, 0)
+                c += 1
+                barcode_counts[barcode] = c
+
+                counter += 1
+                if counter > 3000:
+                    break
+        barcode_list = BarcodeStatistics(barcode_counts).major_barcodes()
+        return barcode_list
+
+
 class Demultiplex:
     """Base class for demultiplexing FASTQ files.
     """
 
     DEFAULT_ERROR_RATE = 0.1
-
-    @staticmethod
-    def parse_barcode_outputs(barcode_outputs):
-        """Parses the barcode and output file prefix pairs specified as a list of strings like:
-            "BARCODE=PREFIX", or "BARCODE_1 BARCODE_2=PREFIX"
-
-        Args:
-            barcode_outputs (list): A list of strings in the format of BARCODE=PREFIX
-
-        Returns: A dictionary, where each key is a barcode, each value is the file_prefix.
-
-        """
-        barcode_dict = {}
-        for output in barcode_outputs:
-            arr = str(output).split("=", 1)
-            barcode_list = arr[0].strip().split()
-            file_prefix = arr[1] if len(arr) > 1 else None
-            for barcode in barcode_list:
-                barcode_dict[barcode] = file_prefix
-        return barcode_dict
 
     def __init__(self, adapters, error_rate=None, score=1, penalty=10):
         self.adapters = adapters
