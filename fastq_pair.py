@@ -4,7 +4,7 @@ import math
 import dnaio
 import gc
 import parasail
-from .fastq import ReadIdentifier
+from .fastq_file import ReadIdentifier
 logger = logging.getLogger(__name__)
 
 match_score = 0
