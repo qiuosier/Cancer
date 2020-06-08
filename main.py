@@ -20,21 +20,15 @@ class Program:
         """
         if len(args.r1) != len(args.r2):
             raise ValueError("R1 and R2 must have the same number of files.")
-
-        demux_inline = DemultiplexInline()
-
-        barcode_dict = demux_inline.parse_barcode_outputs(args.barcode)
+        barcode_dict = DemultiplexInline.parse_barcode_outputs(args.barcode)
         barcode_dict[DemultiplexWriter.BARCODE_NOT_MATCHED] = args.unmatched
 
-        fastq_files = demux_inline.pair_fastq_files(args.r1, args.r2)
-        demux_inline.start(
-            fastq_files, barcode_dict, error_rate=args.error_rate, score=args.score, penalty=args.penalty
+        demux_inline = DemultiplexInline(
+            barcode_dict, error_rate=args.error_rate, score=args.score, penalty=args.penalty
         )
+        fastq_files = demux_inline.pair_fastq_files(args.r1, args.r2)
+        demux_inline.start(fastq_files)
 
-        # demux_inline = DemultiplexInline(
-        #     list(barcode_dict.keys()), error_rate=args.error_rate, score=args.score, penalty=args.penalty
-        # )
-        # demux_inline.run_demultiplex(args.r1, args.r2, barcode_dict)
         if args.stats:
             demux_inline.save_statistics(args.stats, sample_name=args.name, header=args.header)
 
@@ -42,7 +36,7 @@ class Program:
     def demux_barcode(args):
         if len(args.r1) != len(args.r2):
             raise ValueError("R1 and R2 must have the same number of files.")
-        demux_dual = DemultiplexDualIndex()
+
         if args.barcode:
             adapters = [s.strip() for s in args.barcode]
         else:
@@ -51,14 +45,17 @@ class Program:
             else:
                 r1 = args.r1
             logger.debug("Determining the barcodes in %s..." % r1)
-            adapters = demux_dual.determine_adapters(r1)
+            adapters = DemultiplexDualIndex.determine_adapters(r1)
         logger.debug("Barcodes: %s" % adapters)
         if not os.path.exists(args.output):
             os.makedirs(args.output)
         # Use barcode as output file prefix
         barcode_dict = {adapter: os.path.join(args.output, adapter) for adapter in adapters}
+        demux_dual = DemultiplexDualIndex(
+            barcode_dict, error_rate=args.error_rate, score=args.score, penalty=args.penalty
+        )
         fastq_files = demux_dual.pair_fastq_files(args.r1, args.r2)
-        demux_dual.start(fastq_files, barcode_dict, error_rate=args.error_rate, score=args.score, penalty=args.penalty)
+        demux_dual.start(fastq_files)
 
     @staticmethod
     def compare_fastq(args):
