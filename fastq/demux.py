@@ -11,8 +11,8 @@ import tempfile
 import datetime
 import time
 from multiprocessing import Process, Manager
-from .fastq_pair import ReadPair
-from .fastq_file import IlluminaFASTQ, BarcodeStatistics
+from ..fastq_pair import ReadPair
+from ..fastq_file import IlluminaFASTQ, BarcodeStatistics
 logger = logging.getLogger(__name__)
 
 

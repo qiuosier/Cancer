@@ -3,9 +3,9 @@ import argparse
 import os
 import logging
 import json
-from .fastq import ReadIdentifier
+from .fastq_file import ReadIdentifier
 from .fastq_pair import FASTQPair
-from .demux import DemultiplexInline, DemultiplexDualIndex, DemultiplexWriter
+from .fastq.demux import DemultiplexInline, DemultiplexDualIndex, DemultiplexWriter
 from .variants import files
 from Aries.outputs import LoggingConfig
 logger = logging.getLogger(__name__)
@@ -141,6 +141,12 @@ def main():
 
     sub_parser = subparsers.add_parser("parse_read_identifier", help="Parses the identifier of a read from FASTQ file.")
     sub_parser.add_argument('line', help="Identifier line of a read from FASTQ file.")
+
+    sub_parser = subparsers.add_parser("count_inline_barcode", help="Count the usage of Inline Barcodes")
+    sub_parser.add_argument('--r1', nargs='+', required=True, help="FASTQ R1 files")
+    sub_parser.add_argument('--r2', nargs='+', required=True, help="FASTQ R2 files")
+    sub_parser.add_argument('-s', type=int, help="Starting position of the barcode (0-based)")
+    sub_parser.add_argument('-l', type=int, required=True, help="Length of the barcode")
 
     args = parser.parse_args()
     # Show help if no subparser matched.
