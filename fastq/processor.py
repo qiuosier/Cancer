@@ -8,6 +8,69 @@ from multiprocessing import Process, Manager
 logger = logging.getLogger(__name__)
 
 
+class FASTQWorker:
+    """Represents a worker process for processing FASTQ reads
+    """
+
+    def __init__(self):
+        """Initialize a worker process.
+
+        """
+        # Stores the statistics
+        # Each sub-class may have different keys for the counts dictionary.
+        # The values should be integers.
+        # Whether to use this in the sub-class is optional.
+        self.counts = dict(matched=0, unmatched=0, total=0)
+
+    def add_count(self, key, val=1):
+        """Increments the value of a particular key in counts (dictionary)
+        This is a static method and it does NOT modify the self.counts
+        """
+        c = self.counts.get(key, 0)
+        c += val
+        self.counts[key] = c
+        return self.counts
+
+    def start(self, in_queue, out_queue):
+        """Starts processing reads from in_queue.
+        The number of reads processed are put into the out_queue for counting purpose.
+
+        Args:
+            in_queue: A queue holding list of reads to be processed.
+                Each item in the in_queue is a list reads so that the frequency of access the queue are reduced.
+            out_queue: A queue holding integers for counting purpose.
+
+        Returns:
+
+        """
+        active_time = datetime.timedelta()
+        batch_count = 0
+
+        while True:
+            reads = in_queue.get()
+            # Keep the starting time for each batch processing
+            timer_started = datetime.datetime.now()
+            if reads is None:
+                logger.debug("Process %s, Active time: %s (%s batches, %s/batch)." % (
+                    os.getpid(), active_time, batch_count, active_time / batch_count
+                ))
+                return self.counts
+            # results = []
+            for read_pair in reads:
+                self.process_read_pair(read_pair)
+
+            self.add_count('total', len(reads))
+            batch_count += 1
+            # Add processing time for this batch
+            active_time += (datetime.datetime.now() - timer_started)
+            out_queue.put(len(reads))
+
+    def process_read_pair(self, read_pair):
+        """Process the read pair
+        """
+        raise NotImplementedError
+
+
 class FASTQProcessor:
 
     # The number of read pairs to be packed into each item in the processing queue.
@@ -33,12 +96,18 @@ class FASTQProcessor:
         batch_count = 0
 
         process_started = datetime.datetime.now()
-        for fastq_pair in fastq_files:
-            with dnaio.open(fastq_pair[0], file2=fastq_pair[1]) as fastq_in:
+        for fastq in fastq_files:
+            if isinstance(fastq, str):
+                r1 = fastq
+                r2 = None
+            else:
+                r1 = fastq[0]
+                r2 = fastq[1]
+            with dnaio.open(r1, file2=r2) as fastq_in:
                 size = 0
                 reads = []
-                for read1, read2 in fastq_in:
-                    reads.append((read1, read2))
+                for read in fastq_in:
+                    reads.append(read)
                     size += 1
                     if size > FASTQProcessor.BATCH_SIZE:
                         batch_count += 1
@@ -162,7 +231,7 @@ class FASTQProcessor:
                     ready = False
             while not self.worker_queue.empty():
                 counter += self.worker_queue.get()
-            print("{:,} reads processed.".format(counter))
+            print("{:,} reads/pairs processed.".format(counter))
             if ready:
                 break
             time.sleep(5)
@@ -185,7 +254,7 @@ class FASTQProcessor:
             job = pool.apply_async(
                 self.start_worker,
                 (self.worker_class, self.reader_queue, self.worker_queue, *self.worker_args),
-                **self.worker_kwargs
+                self.worker_kwargs
             )
             jobs.append(job)
 

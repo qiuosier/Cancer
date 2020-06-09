@@ -9,7 +9,7 @@ import re
 import logging
 import tempfile
 import datetime
-from .processor import FASTQProcessor
+from .processor import FASTQProcessor, FASTQWorker
 from ..fastq_pair import ReadPair
 from ..fastq_file import IlluminaFASTQ, BarcodeStatistics
 logger = logging.getLogger(__name__)
@@ -104,7 +104,7 @@ class DemultiplexWriter(dict):
         return self.close()
 
 
-class DemultiplexWorker:
+class DemultiplexWorker(FASTQWorker):
     """Represents a worker process for demultiplexing FASTQ reads
     """
     DEFAULT_ERROR_RATE = 0.1
@@ -120,6 +120,7 @@ class DemultiplexWorker:
             score: Score for one base pair match.
             penalty: Penalty for one unit distance.
         """
+        super().__init__()
         self.barcode_dict = barcode_dict
         self.adapters = list(barcode_dict.keys())
         self.min_match_length = round(min([len(adapter) / 2 for adapter in self.adapters]))
@@ -134,12 +135,6 @@ class DemultiplexWorker:
 
         self.score_matrix = self.create_score_matrix()
 
-        # Stores the statistics
-        # Each sub-class may have different keys for the counts dictionary.
-        # The values should be integers.
-        # Whether to use this in the sub-class is optional.
-        self.counts = dict(matched=0, unmatched=0, total=0)
-
     def create_score_matrix(self):
         """Creates a parasail score matrix for alignment
         """
@@ -151,15 +146,6 @@ class DemultiplexWorker:
             s1, s2, self.penalty, self.penalty, score_matrix
         )
         return (self.score * result.matches - result.score) / self.penalty
-
-    def add_count(self, key, val=1):
-        """Increments the value of a particular key in counts (dictionary)
-        This is a static method and it does NOT modify the self.counts
-        """
-        c = self.counts.get(key, 0)
-        c += val
-        self.counts[key] = c
-        return self.counts
 
     def start(self, in_queue, out_queue):
         """Starts the demultiplexing to process reads from in_queue.
@@ -353,7 +339,7 @@ class DemultiplexProcess(FASTQProcessor):
         self.error_rate = error_rate
         self.score = score
         self.penalty = penalty
-        
+
         self.adapters = list(self.barcode_dict.keys())
 
     def start(self, fastq_files):
