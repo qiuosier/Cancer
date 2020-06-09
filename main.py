@@ -6,6 +6,7 @@ import json
 from .fastq_file import ReadIdentifier
 from .fastq_pair import FASTQPair
 from .fastq.demux import DemultiplexInline, DemultiplexDualIndex, DemultiplexWriter
+from .fastq.barcode import BarcodeCounter
 from .variants import files
 from Aries.outputs import LoggingConfig
 logger = logging.getLogger(__name__)
@@ -64,6 +65,19 @@ class Program:
         if not os.path.exists(args.output):
             os.makedirs(args.output)
         FASTQPair(*args.FASTQ).diff(args.compare[0], args.compare[1], args.output, args.chunk_size)
+
+    @staticmethod
+    def count_inline_barcode(args):
+        """Counts the inline barcode
+        """
+        if args.r2:
+            if len(args.r1) != len(args.r2):
+                raise ValueError("R1 and R2 must have the same number of files.")
+            fastq_files = BarcodeCounter.pair_fastq_files(args.r1, args.r2)
+        else:
+            fastq_files = args.r1
+
+        BarcodeCounter(args.start, args.length).start(fastq_files)
 
     @staticmethod
     def filter_whitelist(args):
@@ -141,9 +155,9 @@ def main():
 
     sub_parser = subparsers.add_parser("count_inline_barcode", help="Count the usage of Inline Barcodes")
     sub_parser.add_argument('--r1', nargs='+', required=True, help="FASTQ R1 files")
-    sub_parser.add_argument('--r2', nargs='+', required=True, help="FASTQ R2 files")
-    sub_parser.add_argument('-s', type=int, help="Starting position of the barcode (0-based)")
-    sub_parser.add_argument('-l', type=int, required=True, help="Length of the barcode")
+    sub_parser.add_argument('--r2', nargs='+', help="FASTQ R2 files")
+    sub_parser.add_argument('-s', '--start', type=int, help="Starting position of the barcode (0-based)")
+    sub_parser.add_argument('-l', '--length', type=int, required=True, help="Length of the barcode")
 
     args = parser.parse_args()
     # Show help if no subparser matched.
