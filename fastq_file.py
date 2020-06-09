@@ -6,7 +6,7 @@ import logging
 from Aries.storage import StorageFile
 from Aries.visual.plotly import PlotlyFigure
 from Aries.collections import sort_lists
-from .sequence import Sequence
+from .genomics.sequence import Sequence
 logger = logging.getLogger(__name__)
 
 

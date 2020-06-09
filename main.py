@@ -3,9 +3,10 @@ import argparse
 import os
 import logging
 import json
-from .fastq import ReadIdentifier
+from .fastq_file import ReadIdentifier
 from .fastq_pair import FASTQPair
-from .demux import DemultiplexInline, DemultiplexBarcode, DemultiplexProcess, DemultiplexInlineWorker
+from .fastq.demux import DemultiplexInline, DemultiplexDualIndex, DemultiplexWriter
+from .fastq.barcode import BarcodeCounter
 from .variants import files
 from Aries.outputs import LoggingConfig
 logger = logging.getLogger(__name__)
@@ -20,19 +21,15 @@ class Program:
         """
         if len(args.r1) != len(args.r2):
             raise ValueError("R1 and R2 must have the same number of files.")
+        barcode_dict = DemultiplexInline.parse_barcode_outputs(args.barcode)
+        barcode_dict[DemultiplexWriter.BARCODE_NOT_MATCHED] = args.unmatched
 
-        barcode_dict = DemultiplexProcess.parse_barcode_outputs(args.barcode)
-        barcode_dict["NO_MATCH"] = args.unmatched
-
-        fastq_files = DemultiplexProcess.pair_fastq_files(args.r1, args.r2)
-        demux_inline = DemultiplexProcess(DemultiplexInlineWorker).start(
-            fastq_files, barcode_dict, error_rate=args.error_rate, score=args.score, penalty=args.penalty
+        demux_inline = DemultiplexInline(
+            barcode_dict, error_rate=args.error_rate, score=args.score, penalty=args.penalty
         )
+        fastq_files = demux_inline.pair_fastq_files(args.r1, args.r2)
+        demux_inline.start(fastq_files)
 
-        # demux_inline = DemultiplexInline(
-        #     list(barcode_dict.keys()), error_rate=args.error_rate, score=args.score, penalty=args.penalty
-        # )
-        # demux_inline.run_demultiplex(args.r1, args.r2, barcode_dict)
         if args.stats:
             demux_inline.save_statistics(args.stats, sample_name=args.name, header=args.header)
 
@@ -40,6 +37,7 @@ class Program:
     def demux_barcode(args):
         if len(args.r1) != len(args.r2):
             raise ValueError("R1 and R2 must have the same number of files.")
+
         if args.barcode:
             adapters = [s.strip() for s in args.barcode]
         else:
@@ -48,14 +46,17 @@ class Program:
             else:
                 r1 = args.r1
             logger.debug("Determining the barcodes in %s..." % r1)
-            adapters = DemultiplexBarcode.determine_adapters(r1)
+            adapters = DemultiplexDualIndex.determine_adapters(r1)
         logger.debug("Barcodes: %s" % adapters)
         if not os.path.exists(args.output):
             os.makedirs(args.output)
         # Use barcode as output file prefix
         barcode_dict = {adapter: os.path.join(args.output, adapter) for adapter in adapters}
-        demux_barcode = DemultiplexBarcode(adapters, error_rate=args.error_rate, score=args.score, penalty=args.penalty)
-        demux_barcode.run_demultiplex(args.r1, args.r2, barcode_dict)
+        demux_dual = DemultiplexDualIndex(
+            barcode_dict, error_rate=args.error_rate, score=args.score, penalty=args.penalty
+        )
+        fastq_files = demux_dual.pair_fastq_files(args.r1, args.r2)
+        demux_dual.start(fastq_files)
 
     @staticmethod
     def compare_fastq(args):
@@ -64,6 +65,19 @@ class Program:
         if not os.path.exists(args.output):
             os.makedirs(args.output)
         FASTQPair(*args.FASTQ).diff(args.compare[0], args.compare[1], args.output, args.chunk_size)
+
+    @staticmethod
+    def count_inline_barcode(args):
+        """Counts the inline barcode
+        """
+        if args.r2:
+            if len(args.r1) != len(args.r2):
+                raise ValueError("R1 and R2 must have the same number of files.")
+            fastq_files = BarcodeCounter.pair_fastq_files(args.r1, args.r2)
+        else:
+            fastq_files = args.r1
+
+        BarcodeCounter(args.start, args.length).start(fastq_files)
 
     @staticmethod
     def filter_whitelist(args):
@@ -138,6 +152,12 @@ def main():
 
     sub_parser = subparsers.add_parser("parse_read_identifier", help="Parses the identifier of a read from FASTQ file.")
     sub_parser.add_argument('line', help="Identifier line of a read from FASTQ file.")
+
+    sub_parser = subparsers.add_parser("count_inline_barcode", help="Count the usage of Inline Barcodes")
+    sub_parser.add_argument('--r1', nargs='+', required=True, help="FASTQ R1 files")
+    sub_parser.add_argument('--r2', nargs='+', help="FASTQ R2 files")
+    sub_parser.add_argument('-s', '--start', type=int, help="Starting position of the barcode (0-based)")
+    sub_parser.add_argument('-l', '--length', type=int, required=True, help="Length of the barcode")
 
     args = parser.parse_args()
     # Show help if no subparser matched.
