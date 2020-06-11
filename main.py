@@ -3,6 +3,7 @@ import argparse
 import os
 import logging
 import json
+import sys
 from .fastq_file import ReadIdentifier
 from .fastq_pair import FASTQPair
 from .fastq.demux import DemultiplexInline, DemultiplexDualIndex, DemultiplexWriter
@@ -157,7 +158,8 @@ def main():
     sub_parser = subparsers.add_parser("count_inline_barcode", help="Count the usage of Inline Barcodes")
     sub_parser.add_argument('--r1', nargs='+', required=True, help="FASTQ R1 files")
     sub_parser.add_argument('--r2', nargs='+', help="FASTQ R2 files")
-    sub_parser.add_argument('-s', '--start', type=int, help="Starting position of the barcode (0-based)")
+    sub_parser.add_argument('-s', '--start', type=int, default=0,
+                            help="Starting position of the barcode (0-based), defaults to 0")
     sub_parser.add_argument('-l', '--length', type=int, required=True, help="Length of the barcode")
 
     args = parser.parse_args()
@@ -170,6 +172,7 @@ def main():
     print("Starting %s at %s" % (args.program, start))
     func(args)
     print("Total Time: %s" % (datetime.datetime.now() - start))
+    sys.exit(0)
 
 
 if __name__ == '__main__':

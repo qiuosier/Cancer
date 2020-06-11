@@ -269,5 +269,5 @@ class FASTQProcessor:
         self.finalize_readers(readers, reader_q_size)
 
         pool.terminate()
-        logger.debug("Finished Processing FASTQ.")
+        # logger.debug("Finished Processing FASTQ.")
         return self
