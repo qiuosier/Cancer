@@ -78,6 +78,7 @@ class Program:
             fastq_files = args.r1
 
         BarcodeCounter(args.start, args.length).start(fastq_files)
+        return
 
     @staticmethod
     def filter_whitelist(args):

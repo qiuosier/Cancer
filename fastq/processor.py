@@ -215,6 +215,7 @@ class FASTQProcessor:
     def finalize_readers(self, readers, reader_q_size):
         for reader in readers:
             reader.join()
+            reader.terminate()
         self.print_queue_size(reader_q_size)
         logger.debug("Reader's queue max size: %s" % max(reader_q_size))
 
@@ -267,4 +268,6 @@ class FASTQProcessor:
         self.collect_results(jobs)
         self.finalize_readers(readers, reader_q_size)
 
+        pool.terminate()
+        logger.debug("Finished Processing FASTQ.")
         return self
