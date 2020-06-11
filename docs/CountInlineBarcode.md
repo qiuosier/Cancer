@@ -5,7 +5,7 @@
 
  The results are stored in a dictionary, where the keys are the barcodes and the values are the corresponding read counts. 
  
- For paired-end sequencing files, this program counts R1 and R2 separately. In the results, `_1` and `_2` are appended to the barcode to indicate if the counts are from R1 or R2. Note that for paired-end files, the total number of reads is twice the number of read pairs in the FASTQ files, the percentages in the outputs are with respect to the total number of reads processed.
+ For paired-end sequencing files, this program counts R1 and R2 separately. In the results, `_1` and `_2` are appended to the barcode to indicate if the counts are from R1 or R2. Note that for paired-end files, the total number of reads is twice the number of read pairs in the FASTQ files, the percentages in the outputs are calculated using the total number of read pairs as denominator.
 
 ## Command:
 ```

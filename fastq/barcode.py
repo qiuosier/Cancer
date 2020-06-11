@@ -40,9 +40,9 @@ class BarcodeCounter(FASTQProcessor):
             self.update_counts(r)
         count_list = [(k, v) for k, v in self.counts.items()]
         count_list.sort(key=lambda x: x[1], reverse=True)
-        total = sum(self.counts.values())
+        total = self.counts.get("total")
         print("Total Reads: %s" % total)
-        cutoff = total * self.CUMULATIVE_PERCENT_CUTOFF / 100
+        cutoff = total * 2 * self.CUMULATIVE_PERCENT_CUTOFF / 100
         cumulative_sum = 0
         for t in count_list:
             if t[0] in ['total', 'matched', 'unmatched']:
