@@ -184,7 +184,7 @@ class FASTQProcessor:
         self.counts = dict()
 
         self.reader_queue = self.manager.Queue(self.pool_size * 100)
-        self.worker_queue = self.manager.Queue(self.pool_size * 100)
+        self.worker_queue = self.manager.Queue()
 
     def update_counts(self, counts):
         """Updates the demultiplex statistics.
@@ -215,8 +215,8 @@ class FASTQProcessor:
     def finalize_readers(self, readers, reader_q_size):
         for reader in readers:
             reader.join()
-        logger.debug("Reader's queue max size: %s" % max(reader_q_size))
         self.print_queue_size(reader_q_size)
+        logger.debug("Reader's queue max size: %s" % max(reader_q_size))
 
     def wait_for_jobs(self, jobs):
         # Wait for the jobs to finish and keep track of the queue size
