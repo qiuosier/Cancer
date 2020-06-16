@@ -31,9 +31,7 @@ def get_access_token():
             with open(credentials, "r") as credentials_json:
                 credential_dict = json.load(credentials_json)
         else:
-            raise EnvironmentError(
-                "BaseSpace credential not found at %s." % credentials
-            )
+            return credentials
     return credential_dict.get("access_token")
 
 

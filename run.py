@@ -1,7 +1,7 @@
-from Aries.outputs import LoggingConfig
+from Aries.outputs import LoggingConfig, PackageLogFilter
 from .main import main
 
 
 if __name__ == '__main__':
-    with LoggingConfig():
+    with LoggingConfig(filters=[PackageLogFilter(packages="Cancer")]):
         main()

@@ -1,6 +1,6 @@
 # The Cancer Toolbox
 Python programs for processing FASTQ files on multiprocessor computer.
-* Accessing FASTQ files on Illumina BaseSpace
+* [Accessing FASTQ files on Illumina BaseSpace](docs/BaseSpace.md)
 * Demultiplexing undetermined reads from Illumina paired-end sequencing.
 * Demultiplexing FASTQ reads by inline barcode.
 * Compare reads in two pairs of paired-end FASTQ files.
