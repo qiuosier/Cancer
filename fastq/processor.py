@@ -23,8 +23,7 @@ class FASTQWorker:
         self.counts = dict(matched=0, unmatched=0, total=0)
 
     def add_count(self, key, val=1):
-        """Increments the value of a particular key in counts (dictionary)
-        This is a static method and it does NOT modify the self.counts
+        """Increments the value of a particular key in self.counts (dictionary)
         """
         c = self.counts.get(key, 0)
         c += val
@@ -35,14 +34,17 @@ class FASTQWorker:
         """Starts processing reads from in_queue.
         The number of reads processed are put into the out_queue for counting purpose.
 
+        The worker will stop when the it gets a None from the in_queue.
+
         Args:
             in_queue: A queue holding list of reads to be processed.
                 Each item in the in_queue is a list reads so that the frequency of access the queue are reduced.
             out_queue: A queue holding integers for counting purpose.
 
-        Returns:
+        Returns: self.counts, in which the keys depends on the process_read_pair() method.
 
         """
+        # Keep track of the active processing time.
         active_time = datetime.timedelta()
         batch_count = 0
 
@@ -50,17 +52,20 @@ class FASTQWorker:
             reads = in_queue.get()
             # Keep the starting time for each batch processing
             timer_started = datetime.datetime.now()
+            # None is used to tell the worker to stop processing
             if reads is None:
                 logger.debug("Process %s, Active time: %s (%s batches, %s/batch)." % (
                     os.getpid(), active_time, batch_count, active_time / batch_count
                 ))
                 return self.counts
-            # results = []
+
             for read_pair in reads:
                 self.process_read_pair(read_pair)
 
+            # Add total processed count
             self.add_count('total', len(reads))
             batch_count += 1
+
             # Add processing time for this batch
             active_time += (datetime.datetime.now() - timer_started)
             out_queue.put(len(reads))
@@ -72,12 +77,14 @@ class FASTQWorker:
 
 
 class FASTQProcessor:
+    """Processes FASTQ files with multiple CPUs
+    """
 
     # The number of read pairs to be packed into each item in the processing queue.
     BATCH_SIZE = 5000
 
     @staticmethod
-    def read_data(fastq_files, queue, pool_size):
+    def read_data(fastq_files, queue):
         """Reads read pairs from FASTQ files in to a queue.
         Once finished reading the files, a number of None values will be put into the queue,
         which can be used by other processes to determine if there will be more items for processing.
@@ -88,8 +95,6 @@ class FASTQProcessor:
                 To read files in parallel, start a read_data process for each pair of files.
             queue: A queue for holding reads to be processed.
                 Each item in the queue will be a list of read pairs (2-tuples).
-            pool_size: The number of processors for processing items in the queue.
-                The same number of None values will be put into the queue at the end of reading the files.
 
         """
         enqueue_time = datetime.timedelta()
@@ -126,8 +131,6 @@ class FASTQProcessor:
         print('Finished reading files. Total time: %s, Enqueue time: %s, Batch size: %s, Batch count: %s' % (
             datetime.datetime.now() - process_started, enqueue_time, FASTQProcessor.BATCH_SIZE, batch_count
         ))
-        for i in range(pool_size):
-            queue.put(None)
 
     @staticmethod
     def get_identifier(fastq_file):
@@ -170,6 +173,8 @@ class FASTQProcessor:
 
     @staticmethod
     def start_worker(worker_class, in_queue, out_queue, *args, **kwargs):
+        """Starts a new worker
+        """
         return worker_class(*args, **kwargs).start(in_queue, out_queue)
 
     def __init__(self, worker_class, *args, **kwargs):
@@ -182,6 +187,10 @@ class FASTQProcessor:
         self.manager = Manager()
         self.pool = []
         self.counts = dict()
+
+        self.readers = []
+        # Indicate if any reader is alive
+        self.reading = False
 
         self.reader_queue = self.manager.Queue(self.pool_size * 100)
         self.worker_queue = self.manager.Queue()
@@ -202,22 +211,26 @@ class FASTQProcessor:
         return self.counts
 
     def start_readers(self, fastq_files):
-        readers = []
+        self.reading = True
         for fastq_pair in fastq_files:
             reader = Process(
                 target=FASTQProcessor.read_data,
-                args=([fastq_pair], self.reader_queue, self.pool_size)
+                args=([fastq_pair], self.reader_queue)
             )
             reader.start()
-            readers.append(reader)
-        return readers
+            self.readers.append(reader)
+        return self.readers
 
-    def finalize_readers(self, readers, reader_q_size):
-        for reader in readers:
-            reader.join()
-            reader.terminate()
-        self.print_queue_size(reader_q_size)
-        logger.debug("Reader's queue max size: %s" % max(reader_q_size))
+    def finish_reading(self):
+        for i in range(self.pool_size):
+            self.reader_queue.put(None)
+        self.reading = False
+
+    def readers_alive(self):
+        for reader in self.readers:
+            if reader.is_alive():
+                return True
+        return False
 
     def wait_for_jobs(self, jobs):
         # Wait for the jobs to finish and keep track of the queue size
@@ -226,6 +239,11 @@ class FASTQProcessor:
         counter = 0
         while True:
             reader_q_size.append(self.reader_queue.qsize())
+            if self.reading:
+                if not self.readers_alive():
+                    self.finish_reading()
+            time.sleep(2)
+            # Jobs won't be ready unless finish reading
             ready = True
             for job in jobs:
                 if not job.ready():
@@ -235,7 +253,9 @@ class FASTQProcessor:
             print("{:,} reads/pairs processed.".format(counter))
             if ready:
                 break
-            time.sleep(5)
+            time.sleep(3)
+        self.print_queue_size(reader_q_size)
+        logger.debug("Reader's queue max size: %s" % max(reader_q_size))
         return reader_q_size
 
     def collect_results(self, jobs):
@@ -259,14 +279,13 @@ class FASTQProcessor:
             )
             jobs.append(job)
 
-        readers = self.start_readers(fastq_files)
+        self.start_readers(fastq_files)
 
         # Wait for the jobs to finish and keep track of the queue size
-        reader_q_size = self.wait_for_jobs(jobs)
+        self.wait_for_jobs(jobs)
 
         # Collect the statistics.
         self.collect_results(jobs)
-        self.finalize_readers(readers, reader_q_size)
 
         pool.terminate()
         # logger.debug("Finished Processing FASTQ.")

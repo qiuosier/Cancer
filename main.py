@@ -4,26 +4,43 @@ import os
 import logging
 import json
 import sys
+from Aries.outputs import LoggingConfig, PackageLogFilter
+from .basespace.cmd import basespace_command
 from .fastq_file import ReadIdentifier
 from .fastq_pair import FASTQPair
 from .fastq.demux import DemultiplexInline, DemultiplexDualIndex, DemultiplexWriter
 from .fastq.barcode import BarcodeCounter
 from .variants import files
-from Aries.outputs import LoggingConfig
 logger = logging.getLogger(__name__)
 
 
 class Program:
     """Contains static methods for sub-commands to start the processing program with args
+
+    The name of the methods are the same as the name of the sub parsers in subparsers.add_parser()
     """
+    @staticmethod
+    def basespace(args):
+        """Access information in BaseSpace
+        """
+        options = {
+            "collection": args.collection,
+            "basespace_id": args.basespace_id,
+            "properties": args.properties,
+            "url": args.url
+        }
+        basespace_command(options)
+
     @staticmethod
     def demux_inline(args):
         """Demultiplex FASTQ files with inline barcode adapters.
         """
         if len(args.r1) != len(args.r2):
             raise ValueError("R1 and R2 must have the same number of files.")
+
         barcode_dict = DemultiplexInline.parse_barcode_outputs(args.barcode)
-        barcode_dict[DemultiplexWriter.BARCODE_NOT_MATCHED] = args.unmatched
+        if args.unmatched:
+            barcode_dict[DemultiplexWriter.BARCODE_NOT_MATCHED] = args.unmatched
 
         demux_inline = DemultiplexInline(
             barcode_dict, error_rate=args.error_rate, score=args.score, penalty=args.penalty
@@ -114,8 +131,13 @@ class Program:
 
 def main():
     parser = argparse.ArgumentParser(description="Command line entry points to Cancer package.")
-    # parser.add_argument("program", nargs=1, type=str, help="Program name")
     subparsers = parser.add_subparsers(title="Program", help="Program", dest='program')
+
+    sub_parser = subparsers.add_parser("basespace", help="Display information from Illumina BaseSpace")
+    sub_parser.add_argument('collection', type=str, nargs='?', help='"projects", "runs", "samples" or "appsessions"')
+    sub_parser.add_argument('basespace_id', type=int, nargs='?', help="ID of BaseSpace object")
+    sub_parser.add_argument('--properties', type=str, nargs='+', help="Property name of BaseSpace object")
+    sub_parser.add_argument('--url', type=str, nargs='?', help="Endpoint URL")
 
     sub_parser = subparsers.add_parser("demux_inline", help="Demultiplex FASTQ files using Inline Barcodes")
     sub_parser.add_argument('--r1', nargs='+', required=True, help="FASTQ R1 files")
@@ -162,11 +184,14 @@ def main():
                             help="Starting position of the barcode (0-based), defaults to 0")
     sub_parser.add_argument('-l', '--length', type=int, required=True, help="Length of the barcode")
 
+    # Parse command
     args = parser.parse_args()
     # Show help if no subparser matched.
     if not vars(args).keys() or not args.program or not hasattr(Program, args.program):
         parser.parse_args(["-h"])
         return
+
+    # Run program
     func = getattr(Program, args.program)
     start = datetime.datetime.now()
     print("Starting %s at %s" % (args.program, start))
@@ -176,5 +201,5 @@ def main():
 
 
 if __name__ == '__main__':
-    with LoggingConfig():
+    with LoggingConfig(filters=[PackageLogFilter(packages="Cancer")]):
         main()

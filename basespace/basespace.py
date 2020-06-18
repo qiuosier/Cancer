@@ -37,6 +37,8 @@ def get_list(collection_name, match_key=None, match_value=None):
 
     """
     items = api_collection("v1pre3/users/current/%s" % collection_name)
+    if not items:
+        return []
     result_list = []
     for item in items:
         if match_key is not None and match_value is not None:
