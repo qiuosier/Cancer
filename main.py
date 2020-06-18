@@ -21,6 +21,8 @@ class Program:
     """
     @staticmethod
     def basespace(args):
+        """Access information in BaseSpace
+        """
         options = {
             "collection": args.collection,
             "basespace_id": args.basespace_id,
@@ -35,8 +37,10 @@ class Program:
         """
         if len(args.r1) != len(args.r2):
             raise ValueError("R1 and R2 must have the same number of files.")
+
         barcode_dict = DemultiplexInline.parse_barcode_outputs(args.barcode)
-        barcode_dict[DemultiplexWriter.BARCODE_NOT_MATCHED] = args.unmatched
+        if args.unmatched:
+            barcode_dict[DemultiplexWriter.BARCODE_NOT_MATCHED] = args.unmatched
 
         demux_inline = DemultiplexInline(
             barcode_dict, error_rate=args.error_rate, score=args.score, penalty=args.penalty

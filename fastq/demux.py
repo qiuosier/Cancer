@@ -361,14 +361,13 @@ class DemultiplexProcess(FASTQProcessor):
                 )
                 jobs.append(job)
 
-            readers = self.start_readers(fastq_files)
+            self.start_readers(fastq_files)
 
             # Wait for the jobs to finish and keep track of the queue size
-            reader_q_size = self.wait_for_jobs(jobs)
+            self.wait_for_jobs(jobs)
 
             # Collect the statistics.
             self.collect_results(jobs)
-            self.finalize_readers(readers, reader_q_size)
 
             prefix_dict = self.prepare_concatenation(self.barcode_dict, output_list)
             self.concatenate_fastq(prefix_dict)
