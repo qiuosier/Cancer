@@ -6,6 +6,7 @@ RUN pip install numpy==1.18.1 parasail==1.1.19
 
 ADD requirements.txt requirements.txt
 RUN pip install -r /requirements.txt
+RUN pip install Astrology-Aries --upgrade
 
 COPY . /Cancer
 WORKDIR /
