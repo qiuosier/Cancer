@@ -19,4 +19,4 @@ This toolbox requires Python 3.6 and all packages listed in the `requirements.tx
 This toolbox is available as a docker image: [qiuosier/caner](https://hub.docker.com/repository/docker/qiuosier/cancer).
 
 ## Usage
-The command line programs uses `python -m Cancer.run` as entry point. Running `python -m Cancer.run --help` will display all available programs.
+The command line programs uses `python -m Cancer.run` as entry point. Running `python -m Cancer.run --help` will display all available programs. Running `python -m Cancer.run SUB_PROGRAM --help` will display all options for the `SUB_PROGRAM`.
