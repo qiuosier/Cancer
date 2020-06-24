@@ -288,5 +288,7 @@ class FASTQProcessor:
         self.collect_results(jobs)
 
         pool.terminate()
+        pool.join()
+
         logger.debug("Finished Processing FASTQ.")
         return self
