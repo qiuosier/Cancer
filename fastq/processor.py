@@ -192,7 +192,7 @@ class FASTQProcessor:
         # Indicate if any reader is alive
         self.reading = False
 
-        self.reader_queue = self.manager.Queue(self.pool_size * 100)
+        self.reader_queue = self.manager.Queue(max(self.pool_size * 100, 100))
         self.worker_queue = self.manager.Queue()
 
     def update_counts(self, counts):
@@ -287,6 +287,6 @@ class FASTQProcessor:
         # Collect the statistics.
         self.collect_results(jobs)
 
-        pool.terminate()
-        # logger.debug("Finished Processing FASTQ.")
+        # pool.terminate()
+        logger.debug("Finished Processing FASTQ.")
         return self
