@@ -147,7 +147,7 @@ def main():
     sub_parser.add_argument('--unmatched', type=str, help="File path for saving the unmatched reads.")
     sub_parser.add_argument('--error_rate', type=float, help="Max Error Allowed, defaults to 20%%")
     sub_parser.add_argument('--score', type=int, help="Score for each bp matched, defaults to 1")
-    sub_parser.add_argument('--penalty', type=int, help="Penalty for each bp mis-matched, defaults to 10")
+    sub_parser.add_argument('--penalty', type=int, help="Penalty for each bp mis-matched or gap, defaults to 10")
     sub_parser.add_argument('--stats', type=str, help="Specify a CSV file path to save the statistics.")
     sub_parser.add_argument('--name', type=str, help="For statistics, Sample name")
     sub_parser.add_argument('--header', type=str, help="For statistics, the column header for matched read counts")
@@ -161,7 +161,7 @@ def main():
     sub_parser.add_argument('--name', type=str, help="Sample Name for statistics")
     sub_parser.add_argument('--error_rate', type=float, help="Max Error Allowed")
     sub_parser.add_argument('--score', type=int, help="Score for each bp matched")
-    sub_parser.add_argument('--penalty', type=int, help="Penalty for each bp mis-matched")
+    sub_parser.add_argument('--penalty', type=int, help="Penalty for each bp mis-matched or gap, defaults to 10")
 
     sub_parser = subparsers.add_parser("compare_fastq", help="Compare reads in two pairs of FASTQ files.")
     sub_parser.add_argument('FASTQ', nargs=2, help="First pair of FASTQ R1 and R2 files (P1)")
