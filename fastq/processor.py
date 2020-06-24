@@ -287,6 +287,6 @@ class FASTQProcessor:
         # Collect the statistics.
         self.collect_results(jobs)
 
-        # pool.terminate()
+        pool.terminate()
         logger.debug("Finished Processing FASTQ.")
         return self

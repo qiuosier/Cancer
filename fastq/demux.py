@@ -371,7 +371,8 @@ class DemultiplexProcess(FASTQProcessor):
 
             prefix_dict = self.prepare_concatenation(self.barcode_dict, output_list)
             self.concatenate_fastq(prefix_dict)
-
+        pool.terminate()
+        logger.debug("Finished Processing FASTQ.")
         return self
 
     @staticmethod
