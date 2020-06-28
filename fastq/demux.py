@@ -341,40 +341,18 @@ class DemultiplexProcess(FASTQProcessor):
         self.penalty = penalty
 
         self.adapters = list(self.barcode_dict.keys())
+        self.output_list = []
 
-    def start(self, fastq_files):
-        pool = multiprocessing.Pool(self.pool_size)
+    def get_worker_args(self, i):
+        ident = "Process_%s" % i
+        output_dict = {k: os.path.join(self.workspace, "%s_%s" % (k, ident)) for k, v in self.barcode_dict.items()}
+        self.output_list.append(output_dict)
+        return [output_dict, self.error_rate, self.score, self.penalty]
 
-        output_list = []
-        jobs = []
-        with tempfile.TemporaryDirectory() as temp_dir:
-            for i in range(self.pool_size):
-                ident = "Process_%s" % i
-                output_dict = {k: os.path.join(temp_dir, "%s_%s" % (k, ident)) for k, v in self.barcode_dict.items()}
-                output_list.append(output_dict)
-
-                job = pool.apply_async(
-                    self.start_worker,
-                    (
-                        self.worker_class, self.reader_queue, self.worker_queue, output_dict,
-                        self.error_rate, self.score, self.penalty)
-                )
-                jobs.append(job)
-
-            self.start_readers(fastq_files)
-
-            # Wait for the jobs to finish and keep track of the queue size
-            self.wait_for_jobs(jobs)
-
-            # Collect the statistics.
-            self.collect_results(jobs)
-
-            prefix_dict = self.prepare_concatenation(self.barcode_dict, output_list)
-            self.concatenate_fastq(prefix_dict)
-        pool.terminate()
-        pool.join()
-        logger.debug("Finished Processing FASTQ.")
-        return self
+    def collect_results(self, jobs):
+        super().collect_results(jobs)
+        prefix_dict = self.prepare_concatenation(self.barcode_dict, self.output_list)
+        self.concatenate_fastq(prefix_dict)
 
     @staticmethod
     def prepare_concatenation(barcode_dict, output_list):
