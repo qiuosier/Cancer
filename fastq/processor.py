@@ -4,6 +4,7 @@ import dnaio
 import logging
 import datetime
 import time
+import tempfile
 from multiprocessing import Process, Manager
 logger = logging.getLogger(__name__)
 
@@ -81,13 +82,12 @@ class FASTQProcessor:
     """
 
     # The number of read pairs to be packed into each item in the processing queue.
+
     BATCH_SIZE = 5000
 
     @staticmethod
     def read_data(fastq_files, queue):
         """Reads read pairs from FASTQ files in to a queue.
-        Once finished reading the files, a number of None values will be put into the queue,
-        which can be used by other processes to determine if there will be more items for processing.
 
         Args:
             fastq_files: A list of 2-tuples containing paired-end FASTQ filenames.
@@ -134,7 +134,11 @@ class FASTQProcessor:
 
     @staticmethod
     def get_identifier(fastq_file):
-        """Gets the identifier of the first read in a FASTQ file
+        """Gets the identifier of the first read in a FASTQ file.
+
+        Args:
+            fastq_file: The full path of a FASTQ file.
+
         """
         with dnaio.open(fastq_file) as f:
             for read in f:
@@ -143,6 +147,13 @@ class FASTQProcessor:
     @classmethod
     def pair_fastq_files(cls, r1_list, r2_list):
         """Pairs the FASTQ files from two lists by the identifier of the first read
+
+        Args:
+            r1_list: A list of FASTQ R1 file paths.
+            r2_list: A list of FASTQ R2 file paths.
+
+        Returns: A list of 2-tuples, each is a pair of FASTQ file paths.
+
         """
         if not r1_list or not r2_list:
             raise ValueError("Invalid R1 or R2.\nR1: %s\nR2: %s" % (r1_list, r2_list))
@@ -178,12 +189,14 @@ class FASTQProcessor:
         return worker_class(*args, **kwargs).start(in_queue, out_queue)
 
     def __init__(self, worker_class, *args, **kwargs):
+        self.pool_size = max(os.cpu_count(), 1)
+        logger.debug("Pool Size: %s" % self.pool_size)
+
         self.worker_class = worker_class
         self.worker_args = args
         self.worker_kwargs = kwargs
+        self.workspace = None
 
-        self.pool_size = max(os.cpu_count(), 1)
-        logger.debug("Pool Size: %s" % self.pool_size)
         self.manager = Manager()
         self.pool = []
         self.counts = dict()
@@ -194,6 +207,12 @@ class FASTQProcessor:
 
         self.reader_queue = self.manager.Queue(max(self.pool_size * 100, 100))
         self.worker_queue = self.manager.Queue()
+
+    def get_worker_args(self, i):
+        return self.worker_args
+
+    def get_worker_kwargs(self, i):
+        return self.worker_kwargs
 
     def update_counts(self, counts):
         """Updates the demultiplex statistics.
@@ -211,6 +230,8 @@ class FASTQProcessor:
         return self.counts
 
     def start_readers(self, fastq_files):
+        """Starts a reader for each pair of FASTQ file
+        """
         self.reading = True
         for fastq_pair in fastq_files:
             reader = Process(
@@ -222,11 +243,17 @@ class FASTQProcessor:
         return self.readers
 
     def finish_reading(self):
+        """Finishes the file reading by putting None into the reader_queue
+        """
         for i in range(self.pool_size):
             self.reader_queue.put(None)
         self.reading = False
 
     def readers_alive(self):
+        """Checks if the readers are still reading the files
+
+        Returns: True if a least one reader is still reading the file. Otherwise False
+        """
         for reader in self.readers:
             if reader.is_alive():
                 return True
@@ -259,36 +286,40 @@ class FASTQProcessor:
         return reader_q_size
 
     def collect_results(self, jobs):
-        # Collect the statistics.
+        """Collect the statistics by merging the dictionary returned by each worker.
+        """
         results = [job.get() for job in jobs]
         for r in results:
             self.update_counts(r)
-        logger.debug(self.counts)
+        if len(self.counts.keys()) < 20:
+            logger.debug(self.counts)
         return self.counts
 
     def start(self, fastq_files):
         pool = multiprocessing.Pool(self.pool_size)
         jobs = []
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self.workspace = temp_dir
+            # Start the workers first
+            for i in range(self.pool_size):
+                args = self.get_worker_args(i)
+                kwargs = self.get_worker_kwargs(i)
 
-        for i in range(self.pool_size):
+                job = pool.apply_async(
+                    self.start_worker,
+                    (self.worker_class, self.reader_queue, self.worker_queue, *args),
+                    kwargs
+                )
+                jobs.append(job)
 
-            job = pool.apply_async(
-                self.start_worker,
-                (self.worker_class, self.reader_queue, self.worker_queue, *self.worker_args),
-                self.worker_kwargs
-            )
-            jobs.append(job)
-
-        self.start_readers(fastq_files)
-
-        # Wait for the jobs to finish and keep track of the queue size
-        self.wait_for_jobs(jobs)
-
-        # Collect the statistics.
-        self.collect_results(jobs)
+            # Start reading the files
+            self.start_readers(fastq_files)
+            # Wait for the jobs to finish and keep track of the queue size
+            self.wait_for_jobs(jobs)
+            # Collect the statistics.
+            self.collect_results(jobs)
 
         pool.terminate()
         pool.join()
-
         logger.debug("Finished Processing FASTQ.")
         return self
