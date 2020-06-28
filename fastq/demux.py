@@ -1,4 +1,3 @@
-import multiprocessing
 import os
 import csv
 import math
@@ -7,7 +6,6 @@ import parasail
 import editdistance
 import re
 import logging
-import tempfile
 import datetime
 from .processor import FASTQProcessor, FASTQWorker
 from ..fastq_pair import ReadPair
@@ -386,31 +384,6 @@ class DemultiplexProcess(FASTQProcessor):
             cmd = "cat %s > %s" % (" ".join(p[1] for p in pair_list), r2)
             os.system(cmd)
             logger.debug(r2)
-
-    @staticmethod
-    def write_data(queue, barcode_dict):
-        process_started = datetime.datetime.now()
-        dequeue_time = datetime.timedelta()
-        counter = 0
-        with DemultiplexWriter(barcode_dict) as fp_dict:
-            while True:
-                timer_started = datetime.datetime.now()
-                results = queue.get()
-                dequeue_time += (datetime.datetime.now() - timer_started)
-                if results is None:
-                    print('Finished writing files. Total time: %s, Dequeue time: %s' % (
-                        datetime.datetime.now() - process_started, dequeue_time
-                    ))
-                    return
-                for barcode, read1, read2 in results:
-                    counter += 1
-                    fp = fp_dict.get(barcode)
-                    if not fp:
-                        continue
-                    fp.write(read1, read2)
-
-                    if counter % 100000 == 0:
-                        print("{:,} reads processed.".format(counter))
 
     @staticmethod
     def parse_barcode_outputs(barcode_outputs):
