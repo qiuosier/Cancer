@@ -12,10 +12,10 @@ The programs are designed to be executed on a server with multiple CPUs, such as
 The [dnaio](https://github.com/marcelm/dnaio/) packages is used to read FASTQ files. Behind the scene it uses [xopen](https://github.com/marcelm/xopen/) to open compressed files. The `xopen` module uses [pigz](https://zlib.net/pigz/) to exploit multi-threading for compressing and decompressing data for a single file.
 
 ## FASTQ Processing Framework
-A `FASTQProcessor` class (in `fastq.demux`) is designed to provide a framework for processing FASTQ files. This framework is capable of processing multiple pairs of FASTQ files for the same sample (for example, Illumina MiniSeq produces 4 pairs of FASTQ files for each sample). A reader process will be used to read and decompress each pair of files. The reads are put into a queue for processing. A number of processors (workers) are also started at the same time to process the reads from the queue. The processors are also responsible to compress and write reads into new FASTQ files if needed.
+A `FASTQProcessor` class (in `fastq.processor`) is designed to provide a framework for processing FASTQ files. It implements the logic for reading the file and processing the reads. This framework is capable of processing multiple pairs of FASTQ files for the same sample (for example, Illumina MiniSeq produces 4 pairs of FASTQ files for each sample). A reader process will be used to read and decompress each pair of files. The reads are put into a queue for processing. A number of workers are also started at the same time to process the reads from the queue. The workers are also responsible to compress and write reads into new FASTQ files if needed.
 
 ## Requirements
-This toolbox requires Python 3.6 and all packages listed in the `requirements.txt`.
+This toolbox requires Python 3.6 and all packages listed in the `requirements.txt`. The [pigz](https://zlib.net/pigz/) tool is required in order to use multiple threads for compression/decompression.
 
 ## Docker Image
 This toolbox is available as a docker image: [qiuosier/caner](https://hub.docker.com/repository/docker/qiuosier/cancer).
