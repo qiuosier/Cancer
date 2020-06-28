@@ -34,10 +34,8 @@ class BarcodeCounter(FASTQProcessor):
         super().__init__(BarcodeWorker, start_pos=start, length=length)
 
     def collect_results(self, jobs):
-        # Collect the statistics.
-        results = [job.get() for job in jobs]
-        for r in results:
-            self.update_counts(r)
+        super().collect_results(jobs)
+
         count_list = [(k, v) for k, v in self.counts.items()]
         count_list.sort(key=lambda x: x[1], reverse=True)
         total = self.counts.get("total")

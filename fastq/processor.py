@@ -291,7 +291,8 @@ class FASTQProcessor:
         results = [job.get() for job in jobs]
         for r in results:
             self.update_counts(r)
-        logger.debug(self.counts)
+        if len(self.counts.keys()) < 20:
+            logger.debug(self.counts)
         return self.counts
 
     def start(self, fastq_files):
