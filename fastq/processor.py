@@ -49,6 +49,7 @@ class FASTQWorker:
         active_time = datetime.timedelta()
         batch_count = 0
 
+        # TODO: Pre-start setup and Post-stop clean up with try/except
         while True:
             reads = in_queue.get()
             # Keep the starting time for each batch processing
@@ -79,58 +80,16 @@ class FASTQWorker:
 
 class FASTQProcessor:
     """Processes FASTQ files with multiple CPUs
+
+    Attributes:
+        BATCH_SIZE: The number of read pairs to be packed into each item in the processing queue.
+            A batch is a basic unit of data for processing
+            Each worker will process one batch of data at a time
+            Increasing the batch size can reduces the overhead of accessing the reader queue.
+            However, large batch size may increase the memory usage and decrease the efficiency of each worker.
     """
 
-    # The number of read pairs to be packed into each item in the processing queue.
-
     BATCH_SIZE = 5000
-
-    @staticmethod
-    def read_data(fastq_files, queue):
-        """Reads read pairs from FASTQ files in to a queue.
-
-        Args:
-            fastq_files: A list of 2-tuples containing paired-end FASTQ filenames.
-                The reads from the list of files will be read into the queue sequentially.
-                To read files in parallel, start a read_data process for each pair of files.
-            queue: A queue for holding reads to be processed.
-                Each item in the queue will be a list of read pairs (2-tuples).
-
-        """
-        enqueue_time = datetime.timedelta()
-        batch_count = 0
-
-        process_started = datetime.datetime.now()
-        for fastq in fastq_files:
-            if isinstance(fastq, str):
-                r1 = fastq
-                r2 = None
-            else:
-                r1 = fastq[0]
-                r2 = fastq[1]
-            with dnaio.open(r1, file2=r2) as fastq_in:
-                size = 0
-                reads = []
-                for read in fastq_in:
-                    reads.append(read)
-                    size += 1
-                    if size > FASTQProcessor.BATCH_SIZE:
-                        batch_count += 1
-
-                        timer_started = datetime.datetime.now()
-                        queue.put(reads)
-                        enqueue_time += (datetime.datetime.now() - timer_started)
-
-                        size = 0
-                        reads = []
-
-                timer_started = datetime.datetime.now()
-                queue.put(reads)
-                enqueue_time += (datetime.datetime.now() - timer_started)
-
-        print('Finished reading files. Total time: %s, Enqueue time: %s, Batch size: %s, Batch count: %s' % (
-            datetime.datetime.now() - process_started, enqueue_time, FASTQProcessor.BATCH_SIZE, batch_count
-        ))
 
     @staticmethod
     def get_identifier(fastq_file):
@@ -183,18 +142,70 @@ class FASTQProcessor:
             print("*" * s + str(s))
 
     @staticmethod
+    def read_data(fastq_files, queue):
+        """Reads read pairs from FASTQ files in to a queue.
+
+        Args:
+            fastq_files: A list of 2-tuples containing paired-end FASTQ filenames.
+                The reads from the list of files will be read into the queue sequentially.
+                To read files in parallel, start a read_data process for each pair of files.
+            queue: A queue for holding reads to be processed.
+                Each item in the queue will be a list of read pairs (2-tuples).
+
+        """
+        enqueue_time = datetime.timedelta()
+        batch_count = 0
+
+        process_started = datetime.datetime.now()
+        for fastq in fastq_files:
+            if isinstance(fastq, str):
+                r1 = fastq
+                r2 = None
+            else:
+                r1 = fastq[0]
+                r2 = fastq[1]
+            with dnaio.open(r1, file2=r2) as fastq_in:
+                size = 0
+                reads = []
+                for read in fastq_in:
+                    reads.append(read)
+                    size += 1
+                    if size > FASTQProcessor.BATCH_SIZE:
+                        batch_count += 1
+
+                        timer_started = datetime.datetime.now()
+                        queue.put(reads)
+                        enqueue_time += (datetime.datetime.now() - timer_started)
+
+                        size = 0
+                        reads = []
+
+                timer_started = datetime.datetime.now()
+                queue.put(reads)
+                enqueue_time += (datetime.datetime.now() - timer_started)
+
+        print('Finished reading files. Total time: %s, Enqueue time: %s, Batch size: %s, Batch count: %s' % (
+            datetime.datetime.now() - process_started, enqueue_time, FASTQProcessor.BATCH_SIZE, batch_count
+        ))
+
+    @staticmethod
     def start_worker(worker_class, in_queue, out_queue, *args, **kwargs):
         """Starts a new worker
         """
         return worker_class(*args, **kwargs).start(in_queue, out_queue)
 
     def __init__(self, worker_class, *args, **kwargs):
+        """Initializes a FASTQ processing with a FASTQWorker class or its subclass
+        """
         self.pool_size = max(os.cpu_count(), 1)
         logger.debug("Pool Size: %s" % self.pool_size)
-
+        # The parameters for initializing the workers
+        # Override the get_worker_args() and get_worker_kwargs() to use different parameters for different workers.
         self.worker_class = worker_class
         self.worker_args = args
         self.worker_kwargs = kwargs
+        # Workspace is the path of a temporary directory
+        # This directory is only available during the processing
         self.workspace = None
 
         self.manager = Manager()
@@ -260,7 +271,8 @@ class FASTQProcessor:
         return False
 
     def wait_for_jobs(self, jobs):
-        # Wait for the jobs to finish and keep track of the queue size
+        """Waits for the jobs to finish and keep track of the queue size
+        """
         reader_q_size = []
         # writer_q_size = []
         counter = 0
@@ -286,7 +298,7 @@ class FASTQProcessor:
         return reader_q_size
 
     def collect_results(self, jobs):
-        """Collect the statistics by merging the dictionary returned by each worker.
+        """Collects the statistics by merging the dictionary returned by each worker.
         """
         results = [job.get() for job in jobs]
         for r in results:
@@ -296,8 +308,12 @@ class FASTQProcessor:
         return self.counts
 
     def start(self, fastq_files):
+        """Starts processing
+        """
         pool = multiprocessing.Pool(self.pool_size)
         jobs = []
+        # Create a temporary directory to be used as workspace.
+        # Sub-class may use this workspace to write temporary files.
         with tempfile.TemporaryDirectory() as temp_dir:
             self.workspace = temp_dir
             # Start the workers first
