@@ -13,3 +13,6 @@ In this program, the [dnaio](https://github.com/marcelm/dnaio/) packages is used
 
 ## Identifying the Bottleneck
 When processing FASTQ file, the best situation is to keep both CPU and disk utilization close to 100%. Assuming disk performance is not scalable, disk utilization will be lower if there is not enough CPUs for data decompression or processing. When disk utilization is 100%, adding more CPUs is likely not helpful. However, practically, there are overheads for adding more process to use more CPUs. The optimal number of CPUs will depend on the application and the actual disk performance. More experiments are needed to tweak the number threads for reading FASTQ files (pigz parameters).
+
+## Reading Compressed FASTQ Files
+Writing data into compressed FASTQ files is generally much slower than reading. When saving processed reads, using separated writer process may not be necessary as it can introduce additional overhead. Since the reads are processed by multiple processors, we can also use these processors to compress and write the data into individual files, i.e. each processor will maintain its own output stream. Once the processor finish writing the files, the files can be concatenated very quickly as concatenation does not involve any compression.
