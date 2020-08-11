@@ -90,7 +90,7 @@ While our goal is to identify the alignment with minimum mismatch, the best alig
 * `--score`: The score for one bp match. Defaults to 1.
 * `--penalty`: The penalty for one bp substitution, insertion or deletion (gap). Defaults to 10.
 
-The alignment with the highest score will be considered as the best alignment. Semi-global alignment algorithm allows more complicated scoring by using different penalties for substitution, opening a gap or extending a gap. This program uses the same penalty score to simplify the parameters. The default score and penalty setting guarantees that the best alignment will have the minimum number of mismatches. However, this may not be the case for some other score and penalty values.
+The alignment with the highest score will be considered as the best alignment. The general semi-global alignment algorithm allows more complicated scoring by using different penalties for substitution, opening a gap or extending a gap. This program uses the same penalty score to simplify the parameters. The default score and penalty setting guarantees that the best alignment will have the minimum number of mismatches. However, this may not be the case for some other score and penalty values.
 
 In general, a barcode should only contain "A", "C", "G" and "T". The read sequence may also contain "N". This program considers having an "N" in the read sequence as a mismatch. For example, when score is 1 and penalty is 10. The following penalty matrix is used:
 ```
