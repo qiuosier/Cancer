@@ -5,6 +5,7 @@ import logging
 import datetime
 import time
 import tempfile
+import traceback
 from multiprocessing import Process, Manager
 logger = logging.getLogger(__name__)
 
@@ -49,28 +50,36 @@ class FASTQWorker:
         active_time = datetime.timedelta()
         batch_count = 0
 
-        # TODO: Pre-start setup and Post-stop clean up with try/except
-        while True:
-            reads = in_queue.get()
-            # Keep the starting time for each batch processing
-            timer_started = datetime.datetime.now()
-            # None is used to tell the worker to stop processing
-            if reads is None:
-                logger.debug("Process %s, Active time: %s (%s batches, %s/batch)." % (
-                    os.getpid(), active_time, batch_count, active_time / batch_count
-                ))
-                return self.counts
+        # TODO: Pre-start setup and Post-stop clean up
+        try:
+            while True:
+                reads = in_queue.get()
+                # Keep the starting time for each batch processing
+                timer_started = datetime.datetime.now()
+                # None is used to tell the worker to stop processing
+                if reads is None:
+                    batch_time = (active_time / batch_count) if batch_count else 0
+                    logger.debug("Process %s, Active time: %s (%s batches, %s/batch)." % (
+                        os.getpid(), active_time, batch_count, batch_time
+                    ))
+                    return self.counts
 
-            for read_pair in reads:
-                self.process_read_pair(read_pair)
+                for read_pair in reads:
+                    self.process_read_pair(read_pair)
 
-            # Add total processed count
-            self.add_count('total', len(reads))
-            batch_count += 1
+                # Add total processed count
+                self.add_count('total', len(reads))
+                batch_count += 1
 
-            # Add processing time for this batch
-            active_time += (datetime.datetime.now() - timer_started)
-            out_queue.put(len(reads))
+                # Add processing time for this batch
+                active_time += (datetime.datetime.now() - timer_started)
+                
+                # Put the total number of reads processed into the queue.
+                out_queue.put(len(reads))
+        except Exception as ex:
+            logger.error(str(ex) + "\n" + traceback.format_exc())
+            # Put a negative number into the queue if there is an error.
+            out_queue.put(-1)
 
     def process_read_pair(self, read_pair):
         """Process the read pair
@@ -288,7 +297,10 @@ class FASTQProcessor:
                 if not job.ready():
                     ready = False
             while not self.worker_queue.empty():
-                counter += self.worker_queue.get()
+                processed_count = self.worker_queue.get()
+                if processed_count < 0:
+                    raise ValueError("An error occurred in one of the worker process. See logs for more details.")
+                counter += processed_count
             print("{:,} reads/pairs processed.".format(counter))
             if ready:
                 break
