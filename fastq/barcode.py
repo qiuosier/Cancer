@@ -45,7 +45,7 @@ class BarcodeCounter(FASTQProcessor):
         for t in count_list:
             if t[0] in ['total', 'matched', 'unmatched']:
                 continue
-            percent = t[1] / total * 100
+            percent = t[1] / total * 100 if total else 0
             print("%s: %10s, %3.2f%%" % (t[0], t[1], percent))
             cumulative_sum += t[1]
             if cumulative_sum > cutoff or percent < self.SINGLE_PERCENT_CUTOFF:

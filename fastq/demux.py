@@ -127,6 +127,8 @@ class DemultiplexWorker(FASTQWorker):
         self.error_rate = error_rate if error_rate else self.DEFAULT_ERROR_RATE
         self.score = int(score) if str(score).isdigit() else 1
         self.penalty = int(penalty) if str(penalty).isdigit() else 10
+        if self.penalty:
+            raise ValueError("Mismatch penalty must be greater than 1.")
         logger.debug("Process %s, Penalty: %s, Error Rate: %s, Score: %s" % (
             os.getpid(), self.penalty, self.error_rate, self.score
         ))
@@ -165,8 +167,9 @@ class DemultiplexWorker(FASTQWorker):
                 # Keep the starting time for each batch processing
                 timer_started = datetime.datetime.now()
                 if reads is None:
+                    batch_time = (active_time / batch_count) if batch_count else 0
                     logger.debug("Process %s, Active time: %s (%s batches, %s/batch)." % (
-                        os.getpid(), active_time, batch_count, active_time / batch_count
+                        os.getpid(), active_time, batch_count, batch_time
                     ))
                     return self.counts
                 # results = []
@@ -431,6 +434,8 @@ class DemultiplexInline(DemultiplexProcess):
             if "total" not in self.counts:
                 raise KeyError("Total read count is missing.")
             total = self.counts.get("total")
+            if not total:
+                return None
             if "unmatched" not in self.counts:
                 raise KeyError("Unmatched read count is missing.")
             unmatched = self.counts.get("unmatched")
