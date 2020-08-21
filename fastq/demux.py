@@ -127,7 +127,7 @@ class DemultiplexWorker(FASTQWorker):
         self.error_rate = error_rate if error_rate else self.DEFAULT_ERROR_RATE
         self.score = int(score) if str(score).isdigit() else 1
         self.penalty = int(penalty) if str(penalty).isdigit() else 10
-        if self.penalty:
+        if not self.penalty:
             raise ValueError("Mismatch penalty must be greater than 1.")
         logger.debug("Process %s, Penalty: %s, Error Rate: %s, Score: %s" % (
             os.getpid(), self.penalty, self.error_rate, self.score
