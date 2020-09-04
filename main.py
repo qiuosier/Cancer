@@ -65,6 +65,7 @@ class Program:
                 r1 = args.r1
             logger.debug("Determining the barcodes in %s..." % r1)
             adapters = DemultiplexDualIndex.determine_adapters(r1)
+
         logger.debug("Barcodes: %s" % adapters)
         if not os.path.exists(args.output):
             os.makedirs(args.output)
@@ -156,7 +157,7 @@ def main():
     sub_parser.add_argument('--r1', nargs='+', required=True, help="FASTQ R1 files")
     sub_parser.add_argument('--r2', nargs='+', required=True, help="FASTQ R2 files")
     sub_parser.add_argument('--barcode', nargs='+',
-                            help="Barcode and the output file prefix in the format of BARCODE=PREFIX")
+                            help="Barcode in the format of [I7+THE REVERSE COMPLEMENT OF I5]")
     sub_parser.add_argument('--output', required=True, help="Output Directory")
     sub_parser.add_argument('--name', type=str, help="Sample Name for statistics")
     sub_parser.add_argument('--error_rate', type=float, help="Max Error Allowed")

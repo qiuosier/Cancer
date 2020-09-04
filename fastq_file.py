@@ -164,44 +164,6 @@ class IlluminaFASTQ:
         barcode = "%s+%s" % (i7, i5)
         return barcode
 
-    def extract_barcodes(self, barcode_list, output_dir):
-        # Stores the file obj for each barcode.
-        barcode_dict = {}
-        current_file = None
-        with open(self.file_path, 'r') as lines:
-            for i, line in enumerate(lines, start=1):
-                # Progress
-                if i > 0 and i % 1000000 == 0:
-                    logger.debug("%s reads processed." % round(i / 4))
-
-                # Continue to write to the current file if the line is not a barcode line.
-                if not line.startswith("@") and current_file:
-                    current_file.write(line)
-                    continue
-
-                # Determine the file to be written to base on the barcode.
-                barcode = line.strip().split(":")[-1]
-                if re.match(self.dual_index_pattern, barcode):
-                    barcode = self.convert_barcode(barcode)
-                if barcode not in barcode_list:
-                    current_file = None
-                    continue
-
-                file_obj = barcode_dict.get(barcode)
-                if not file_obj:
-                    file_path = os.path.join(output_dir, barcode + ".fastq")
-
-                    logger.debug("Creating file: %s" % file_path)
-                    file_obj = StorageFile.init(file_path).open("w")
-                    barcode_dict[barcode] = file_obj
-                # Write the barcode line
-                file_obj.write(line)
-                current_file = file_obj
-            logger.debug("%s reads processed." % round(i / 4))
-        # Close the files
-        for file_obj in barcode_dict.values():
-            file_obj.close()
-
     def __process_barcode(self, lines, method):
         """
 
