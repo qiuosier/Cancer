@@ -201,7 +201,12 @@ class FASTQProcessor:
     def start_worker(worker_class, in_queue, out_queue, *args, **kwargs):
         """Starts a new worker
         """
-        return worker_class(*args, **kwargs).start(in_queue, out_queue)
+        try:
+            return worker_class(*args, **kwargs).start(in_queue, out_queue)
+        except:
+            # Put a negative number into output queue so that the main process knows there is an error.
+            out_queue.put(-1)
+            return 0
 
     def __init__(self, worker_class, *args, **kwargs):
         """Initializes a FASTQ processing with a FASTQWorker class or its subclass
