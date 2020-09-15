@@ -40,8 +40,9 @@ class FASTQWorker:
 
         Args:
             in_queue: A queue holding list of reads to be processed.
-                Each item in the in_queue is a list reads so that the frequency of access the queue are reduced.
+                Each item in the in_queue is a list reads so that the frequency of accessing the queue are reduced.
             out_queue: A queue holding integers for counting purpose.
+                a negative number in out_queue indicates an error/exception
 
         Returns: self.counts, in which the keys depends on the process_read_pair() method.
 
@@ -257,13 +258,13 @@ class FASTQProcessor:
     def start_readers(self, fastq_files):
         """Starts a reader for each pair of FASTQ file
         """
+        reader_pool = multiprocessing.Pool(len(fastq_files))
         self.reading = True
         for fastq_pair in fastq_files:
-            reader = Process(
-                target=FASTQProcessor.read_data,
-                args=([fastq_pair], self.reader_queue)
+            reader = reader_pool.apply_async(
+                FASTQProcessor.read_data,
+                ([fastq_pair], self.reader_queue),
             )
-            reader.start()
             self.readers.append(reader)
         return self.readers
 
@@ -280,8 +281,10 @@ class FASTQProcessor:
         Returns: True if a least one reader is still reading the file. Otherwise False
         """
         for reader in self.readers:
-            if reader.is_alive():
+            if not reader.ready():
                 return True
+            if not reader.successful():
+                raise IOError("An error occurred when reading the FASTQ files. See logs for more details.")
         return False
 
     def wait_for_jobs(self, jobs):
@@ -318,6 +321,9 @@ class FASTQProcessor:
         """Collects the statistics by merging the dictionary returned by each worker.
         """
         results = [job.get() for job in jobs]
+        for job in jobs:
+            if not job.successful():
+                raise ValueError("An error occurred in one of the worker process. See logs for more details.")
         for r in results:
             self.update_counts(r)
         if len(self.counts.keys()) < 20:
@@ -327,8 +333,8 @@ class FASTQProcessor:
     def start(self, fastq_files):
         """Starts processing
         """
-        pool = multiprocessing.Pool(self.pool_size)
-        jobs = []
+        worker_pool = multiprocessing.Pool(self.pool_size)
+        worker_jobs = []
         # Create a temporary directory to be used as workspace.
         # Sub-class may use this workspace to write temporary files.
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -338,21 +344,21 @@ class FASTQProcessor:
                 args = self.get_worker_args(i)
                 kwargs = self.get_worker_kwargs(i)
 
-                job = pool.apply_async(
-                    self.start_worker,
+                job = worker_pool.apply_async(
+                    FASTQProcessor.start_worker,
                     (self.worker_class, self.reader_queue, self.worker_queue, *args),
                     kwargs
                 )
-                jobs.append(job)
+                worker_jobs.append(job)
 
             # Start reading the files
             self.start_readers(fastq_files)
-            # Wait for the jobs to finish and keep track of the queue size
-            self.wait_for_jobs(jobs)
+            # Wait for the worker_jobs to finish and keep track of the queue size
+            self.wait_for_jobs(worker_jobs)
             # Collect the statistics.
-            self.collect_results(jobs)
+            self.collect_results(worker_jobs)
 
-        pool.terminate()
-        pool.join()
+        worker_pool.terminate()
+        worker_pool.join()
         logger.debug("Finished Processing FASTQ.")
         return self
